@@ -1,0 +1,449 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Space+Grotesk:wght@400;500;700&family=Oxanium:wght@600;700;800&family=Saira+Condensed:wght@500;600;700&family=Saira:wght@400;500;600&display=swap');
+
+:root {
+  color-scheme: dark;
+  --bg-1: #02040b;
+  --bg-2: #07111f;
+  --text: #f5f8ff;
+  --muted: rgba(234, 240, 255, 0.72);
+  --line: rgba(147, 194, 255, 0.18);
+  --glass: linear-gradient(180deg, rgba(11, 18, 36, 0.72), rgba(5, 9, 22, 0.84));
+  --glass-strong: linear-gradient(180deg, rgba(16, 28, 56, 0.84), rgba(6, 10, 24, 0.92));
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  --primary: #8dd6ff;
+  --accent: #ffce6b;
+  --good: #8cf2c8;
+  --bad: #ff9a92;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#game {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(64, 118, 255, 0.15), transparent 35%),
+    radial-gradient(circle at bottom, rgba(25, 212, 255, 0.1), transparent 28%),
+    linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  color: var(--text);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+.solar-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at center, rgba(84, 129, 255, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(5, 8, 17, 0.2), rgba(2, 3, 9, 0.6));
+}
+
+.solar-stage,
+.solar-stage canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.solar-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.solar-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.solar-topbar,
+.solar-sidebar,
+.solar-panel,
+.solar-banner,
+.solar-support,
+.solar-peers {
+  position: absolute;
+}
+
+.solar-topbar {
+  top: 1.2rem;
+  left: 1.2rem;
+  right: 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.solar-sidebar {
+  top: 6.9rem;
+  right: 1.2rem;
+  width: min(27rem, calc(100vw - 2rem));
+}
+
+.solar-panel {
+  left: 1.2rem;
+  bottom: 1.2rem;
+  width: min(38rem, calc(100vw - 2rem));
+}
+
+.solar-banner {
+  top: 1.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.solar-support {
+  inset: 0;
+  display: none;
+  place-items: center;
+  padding: 1.2rem;
+  background: rgba(2, 4, 10, 0.72);
+}
+
+.solar-support.visible {
+  display: grid;
+}
+
+.solar-peers {
+  right: 1.2rem;
+  bottom: 1.2rem;
+  width: min(14rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.glass-card,
+.support-card,
+.center-banner {
+  border: 1px solid var(--line);
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow);
+}
+
+.glass-card {
+  border-radius: 1.45rem;
+  padding: 1rem 1.05rem;
+}
+
+.support-card {
+  width: min(34rem, 100%);
+  border-radius: 1.7rem;
+  padding: 1.6rem;
+  background: var(--glass-strong);
+  text-align: center;
+}
+
+.support-card h2 {
+  margin: 0 0 0.5rem;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 2rem;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.solar-brand h1,
+.mission-card h2 {
+  margin: 0;
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.solar-brand h1 {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+}
+
+.mission-card h2 {
+  font-size: clamp(2rem, 4.4vw, 3rem);
+}
+
+.solar-stats {
+  display: flex;
+  gap: 0.8rem;
+}
+
+.stat-card {
+  min-width: 6.6rem;
+  padding: 0.8rem 1rem;
+  border-radius: 1.2rem;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  backdrop-filter: blur(18px);
+}
+
+.stat-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.stat-card strong {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 1.35rem;
+}
+
+.planet-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.planet-pill {
+  padding: 0.38rem 0.72rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(238, 243, 255, 0.8);
+  font-size: 0.84rem;
+}
+
+.planet-pill.current {
+  border-color: rgba(149, 221, 255, 0.5);
+  background: rgba(70, 156, 255, 0.16);
+  color: white;
+}
+
+.planet-pill.done {
+  border-color: rgba(140, 242, 200, 0.46);
+  background: rgba(140, 242, 200, 0.12);
+  color: rgba(217, 255, 239, 0.95);
+}
+
+.clue-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.clue-list li {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.72rem 0.8rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(147, 194, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.clue-list li.found {
+  border-color: rgba(141, 214, 255, 0.36);
+  background: rgba(77, 168, 255, 0.1);
+}
+
+.clue-label {
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.clue-text {
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.mission-card {
+  pointer-events: auto;
+}
+
+.mission-copy {
+  margin: 0 0 0.4rem;
+  color: #d3ddff;
+  font-size: 1.05rem;
+}
+
+.mission-card p {
+  margin: 0.4rem 0;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.button-row button,
+.choice {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.button-row button:hover,
+.choice:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primary {
+  color: #08111e;
+  background: linear-gradient(135deg, #fbe193, #7bd6ff);
+  box-shadow: 0 12px 28px rgba(89, 176, 255, 0.24);
+}
+
+.secondary {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(147, 194, 255, 0.22);
+}
+
+.choice-grid {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.choice {
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(147, 194, 255, 0.18);
+}
+
+.choice.selected {
+  border-color: rgba(141, 214, 255, 0.5);
+  background: rgba(84, 173, 255, 0.16);
+}
+
+.choice.correct {
+  border-color: rgba(140, 242, 200, 0.55);
+  background: rgba(81, 188, 149, 0.18);
+}
+
+.choice.wrong {
+  border-color: rgba(255, 154, 146, 0.5);
+  background: rgba(255, 103, 91, 0.15);
+}
+
+.choice:disabled {
+  cursor: default;
+}
+
+.answer-note {
+  min-height: 1.7rem;
+  margin-top: 0.9rem;
+  color: #f0f5ff;
+}
+
+.center-banner {
+  min-width: 15rem;
+  padding: 0.7rem 1.2rem;
+  border-radius: 999px;
+  text-align: center;
+}
+
+.center-banner strong {
+  display: block;
+  font-size: 1.2rem;
+}
+
+.center-banner.compact {
+  min-width: auto;
+}
+
+.peer-card {
+  padding: 0.9rem 1rem;
+}
+
+.peer-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.4rem;
+  font-size: 0.92rem;
+}
+
+.peer-row.self strong,
+.peer-row.self span {
+  color: var(--accent);
+}
+
+@media (max-width: 980px) {
+  .solar-topbar {
+    flex-direction: column;
+  }
+
+  .solar-sidebar {
+    top: auto;
+    right: 1rem;
+    bottom: 13.6rem;
+    left: 1rem;
+    width: auto;
+  }
+
+  .solar-panel {
+    right: 1rem;
+    width: auto;
+  }
+
+  .solar-peers {
+    left: 1rem;
+    right: auto;
+    bottom: 1rem;
+    width: 13rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .solar-topbar,
+  .solar-panel,
+  .solar-sidebar,
+  .solar-peers {
+    left: 0.8rem;
+    right: 0.8rem;
+    width: auto;
+  }
+
+  .solar-banner {
+    top: 0.9rem;
+  }
+
+  .solar-sidebar {
+    bottom: 15rem;
+  }
+
+  .solar-peers {
+    bottom: auto;
+    top: 5.8rem;
+  }
+
+  .solar-stats {
+    width: 100%;
+  }
+
+  .stat-card {
+    flex: 1;
+  }
+}
+
