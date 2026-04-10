@@ -5,6 +5,7 @@ import type { PlanetMission } from '../types'
 import { CINEMATIC_SCRIPT, CAMERA_FLY_MS } from './narration'
 import { VoiceEngine } from './voice'
 import { CinematicUI } from './ui'
+import { SwarmEffect } from './swarm'
 import './style.css'
 
 /**
@@ -13,6 +14,7 @@ import './style.css'
  */
 export class CinematicController {
   private voice = new VoiceEngine()
+  private swarm = new SwarmEffect()
   private ui: CinematicUI
   private aborted = false
 
@@ -27,11 +29,14 @@ export class CinematicController {
 
   /** Plays the full cinematic. Resolves when finished or skipped. */
   play(): Promise<void> {
+    if (this.scene.scene) void this.swarm.start(this.scene.scene)
+
     return new Promise<void>((resolve) => {
       const done = () => {
         if (this.aborted) return
         this.aborted = true
         this.voice.stop()
+        if (this.scene.scene) this.swarm.destroy(this.scene.scene)
         this.ui.destroy()
         resolve()
       }
@@ -50,6 +55,11 @@ export class CinematicController {
       // Fly camera to planet (or sun)
       await this.flyToBeat(beat.planetIndex)
       if (this.aborted) return
+
+      // Spawn visible swarm wave at current camera position
+      if (this.scene.camera && this.scene.controls) {
+        this.swarm.spawnWave(this.scene.camera.position, this.scene.controls.target)
+      }
 
       // Show narration text + speak
       this.ui.showText(beat.text)
