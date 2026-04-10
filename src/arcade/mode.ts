@@ -142,7 +142,14 @@ export class ArcadeMode {
 
   handleResize(width: number, height: number): void {
     this.camera.aspect = width / height
+    // Widen FOV in portrait so enough arena width is visible
+    this.camera.fov = width < height ? 55 : 40
     this.camera.updateProjectionMatrix()
+
+    // Clamp player movement to visible area in portrait
+    const vfov = this.camera.fov * Math.PI / 180
+    const visibleHalfWidth = 80 * Math.tan(vfov / 2) * this.camera.aspect
+    this.arena?.setViewportBounds(visibleHalfWidth)
   }
 
   handleAction(name: string, params: Record<string, unknown>): boolean {
