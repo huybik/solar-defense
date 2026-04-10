@@ -13,6 +13,16 @@ Eight-planet route: Mercury to Neptune.
 - `end`: summary and final score → unlock COMMAND CENTER
 - `arcade`: post-lesson Tyrian-style campaign shooter (see below)
 
+### Cinematic Introduction (standalone mode)
+On first standalone visit, a cinematic plays before the lesson begins. Camera flies Neptune → Sun (9 beats) with voice-over narration (Web Speech API, text fallback) telling a Lord of the Rings-inspired invasion story. Skippable. Uses `sessionStorage` to play once per session.
+
+- `src/cinematic/narration.ts`: `NarrationBeat` data (9 beats, planet indices, text, hold durations)
+- `src/cinematic/voice.ts`: `VoiceEngine` — Web Speech API wrapper with voice selection and graceful fallback
+- `src/cinematic/ui.ts`: `CinematicUI` — DOM overlay (letterbox, narration text, skip/begin buttons)
+- `src/cinematic/style.css`: cinematic-specific styles
+- `src/cinematic/cinematic.ts`: `CinematicController` — orchestrates camera flyTo, voice, and UI through the sequence
+- `src/scene/camera.ts`: `flyTo()` method added for arbitrary position-to-position camera transitions (used by cinematic)
+
 ## Architecture
 
 - `src/utils.ts`: shared utilities (`escapeHtml`, `clamp`, `lerp`) used by both lesson and arcade

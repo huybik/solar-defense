@@ -33,6 +33,7 @@ createGame<SolarState>({
     { name: 'jump', params: { to: 'number' }, description: 'Jump to a planet index', godMode: true },
     { name: 'end', description: 'End the voyage immediately', godMode: true },
     { name: 'arcade', description: 'Enter arcade shooter mode', godMode: true },
+    { name: 'cinematic', description: 'Play the cinematic introduction', godMode: true },
     { name: 'set', params: { field: 'string', value: 'string' }, description: 'Override a game field', godMode: true },
   ],
 
@@ -48,6 +49,7 @@ createGame<SolarState>({
     jump(_ctx, params) { runtime.dispatchAction('jump', params) },
     end() { runtime.dispatchAction('end', {}) },
     arcade() { runtime.dispatchAction('arcade', {}) },
+    cinematic() { runtime.dispatchAction('cinematic', {}) },
     set(_ctx, params) { runtime.dispatchAction('set', params) },
   },
 

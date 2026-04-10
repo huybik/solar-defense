@@ -10,36 +10,18 @@ This cinematic replaces the current "Now Approaching [Planet]" briefing screen i
 
 ## Narrative Script
 
-The camera flies inward from Neptune to the Sun. The narration tells **one continuous invasion story** — the planets are visual backdrops, not subjects. Each beat is ~5–8 seconds of voice-over, keeping the whole cinematic tight (~60–80 seconds).
+Three beats, ~25 seconds total. Camera flies Neptune → Earth → Sun with one continuous invasion story.
 
 ### Beat 1 — NEPTUNE (opening)
-> *"It came from beyond the edge of light. A rift tore open past Neptune, and from it poured the Void Swarm — an army without end, following the scent of Gravitium across the dark."*
+> *"A rift tore open beyond Neptune. The Void Swarm poured through — world after world fell silent as the darkness swept inward."*
 
-### Beat 2 — URANUS
-> *"World after world went silent. No warnings. No distress calls. Just darkness swallowing everything in its path."*
+### Beat 2 — EARTH
+> *"They harvested everything in their path, feeding it toward the Sun. Nothing we threw at them held for long."*
 
-### Beat 3 — SATURN
-> *"The Swarm wasn't just destroying — it was harvesting. Every moon, every ring fragment, fed into something being forged closer to the Sun."*
+### Beat 3 — THE SUN (finale)
+> *"Now we see why. The Dark Ring — a crown of stolen fire around our star. The Forgelord's gate. Destroy it, and the Swarm dies. This is the only road."*
 
-### Beat 4 — JUPITER
-> *"Nothing could hold them. Not the gas giants, not our fleets, not the orbital guns. They adapted to everything we threw at them."*
-
-### Beat 5 — MARS
-> *"On Mars, a handful of miners fought back with drill rigs and scrap metal. They bought us days. It was enough."*
-
-### Beat 6 — EARTH
-> *"Enough to send one ship. One pilot. A route plotted straight through the heart of the invasion."*
-
-### Beat 7 — VENUS
-> *"Because our scouts found the source — a sound rising from the inner system. A heartbeat. Growing louder."*
-
-### Beat 8 — MERCURY
-> *"And from Mercury's scorched horizon, we finally saw it."*
-
-### Beat 9 — THE SUN (finale)
-> *"The Dark Ring. A crown of stolen fire, wrapped around our star. The Forgelord's gate. Destroy the Ring, and the Swarm dies with it. This is the only road. And it starts now."*
-
-Camera: Dramatic push toward the Sun, Dark Ring silhouette against corona. Fade to white → gameplay.
+After the cinematic ends → straight to arcade mode (standalone skips the observatory route entirely).
 
 ---
 
@@ -229,10 +211,10 @@ Uses `sessionStorage` so the cinematic plays once per browser session (refreshin
 
 ### Estimated Cinematic Duration
 
-- 9 beats x ~5-8 seconds narration = ~55-65 seconds of voice
-- Camera transitions: ~1.5-2 seconds between planets
-- Total: ~70-80 seconds (~1 min 15 sec)
-- Skippable at any point, click-to-advance on each beat
+- 3 beats x ~6-8 seconds narration = ~20-25 seconds of voice
+- Camera transitions: ~2 seconds between stops
+- Total: ~25-30 seconds
+- Skippable at any point
 
 ---
 

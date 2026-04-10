@@ -10,6 +10,16 @@ interface CameraTransition {
   durationMs: number
 }
 
+interface FlyTransition {
+  fromPosition: Vector3
+  fromTarget: Vector3
+  toPosition: Vector3
+  toTarget: Vector3
+  startedAt: number
+  durationMs: number
+  onComplete?: () => void
+}
+
 function easeInOut(value: number): number {
   return value < 0.5
     ? 4 * value * value * value
@@ -18,11 +28,14 @@ function easeInOut(value: number): number {
 
 export class CameraController {
   private transition: CameraTransition | null = null
+  private flyTransition: FlyTransition | null = null
   private trackedPlanetId = ''
   private trackedPlanetWorld: Vector3 | null = null
   private _tmpV1 = new Vector3()
   private _tmpV2 = new Vector3()
   cameraDetached = false
+
+  get isFlying(): boolean { return this.flyTransition !== null }
 
   focusPlanet(
     camera: PerspectiveCamera,
@@ -58,18 +71,40 @@ export class CameraController {
     this.trackedPlanetWorld = null
   }
 
+  flyTo(
+    camera: PerspectiveCamera,
+    controls: OrbitControls,
+    toPosition: Vector3,
+    toTarget: Vector3,
+    durationMs: number,
+    onComplete?: () => void,
+  ) {
+    this.transition = null  // cancel any planet transition
+    this.flyTransition = {
+      fromPosition: camera.position.clone(),
+      fromTarget: controls.target.clone(),
+      toPosition: toPosition.clone(),
+      toTarget: toTarget.clone(),
+      startedAt: performance.now(),
+      durationMs,
+      onComplete,
+    }
+  }
+
   update(
     camera: PerspectiveCamera,
     controls: OrbitControls,
     visual: PlanetVisual | undefined,
     mission: PlanetMission | null,
   ) {
+    this.updateFlyTransition(camera, controls)
     this.updateTransition(camera, controls, visual, mission)
     this.followPlanet(camera, controls, visual, mission)
   }
 
   reset() {
     this.transition = null
+    this.flyTransition = null
     this.trackedPlanetId = ''
     this.trackedPlanetWorld = null
     this.cameraDetached = false
@@ -88,6 +123,24 @@ export class CameraController {
     this.cameraDetached = true
     this.transition = null
     return true
+  }
+
+  private updateFlyTransition(camera: PerspectiveCamera, controls: OrbitControls) {
+    if (!this.flyTransition) return
+
+    const progress = MathUtils.clamp(
+      (performance.now() - this.flyTransition.startedAt) / this.flyTransition.durationMs, 0, 1
+    )
+    const eased = easeInOut(progress)
+
+    camera.position.lerpVectors(this.flyTransition.fromPosition, this.flyTransition.toPosition, eased)
+    controls.target.lerpVectors(this.flyTransition.fromTarget, this.flyTransition.toTarget, eased)
+
+    if (progress >= 1) {
+      const cb = this.flyTransition.onComplete
+      this.flyTransition = null
+      cb?.()
+    }
   }
 
   private updateTransition(

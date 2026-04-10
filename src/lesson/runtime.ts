@@ -7,6 +7,7 @@ import { buildShell, renderUI, type UIElements } from '../ui/index'
 import { INTERACTIVE_PHASES } from '../types'
 import type { Phase, PlanetMission, SolarState } from '../types'
 import { ArcadeMode } from '../arcade'
+import { CinematicController } from '../cinematic/cinematic'
 import {
   answerPuzzle,
   getCorrectChoiceId,
@@ -32,6 +33,8 @@ import {
   startLessonPointer,
 } from './interactions'
 
+declare const __IS_STANDALONE__: boolean
+
 const VALID_PHASES = new Set<Phase>(['briefing', 'explore', 'puzzle', 'warp', 'end', 'arcade'])
 
 export class SolarGameRuntime {
@@ -52,6 +55,7 @@ export class SolarGameRuntime {
   private onReadyToken = 0
   private pointerState = createLessonPointerState()
   private arcadeMode: ArcadeMode | null = null
+  private cinematicActive = false
   private lastRenderedPlanetIndex = -1
 
   init(ctx: GameContext<SolarState>, data: unknown) {
@@ -93,6 +97,9 @@ export class SolarGameRuntime {
         return
       case 'arcade':
         this.enterArcade()
+        return
+      case 'cinematic':
+        if (!this.cinematicActive) void this.playCinematic()
         return
       case 'set':
         this.handleSetAction(params)
@@ -374,8 +381,21 @@ export class SolarGameRuntime {
 
     const readyToken = this.onReadyToken
     void this.ensureScene()
-      .then(() => {
+      .then(async () => {
         if (readyToken !== this.onReadyToken) return
+
+        // Standalone: cinematic intro → straight to arcade (skip observatory route)
+        if (__IS_STANDALONE__) {
+          if (!this.warmupComplete && !sessionStorage.getItem('solar-cinematic-seen')) {
+            await this.playCinematic()
+            if (readyToken !== this.onReadyToken) return
+            sessionStorage.setItem('solar-cinematic-seen', '1')
+          }
+          this.warmupComplete = true
+          this.enterArcade()
+          return
+        }
+
         this.enterPlanet(0, !this.warmupComplete)
         this.warmupComplete = true
       })
@@ -383,6 +403,22 @@ export class SolarGameRuntime {
         this.fatalError = error instanceof Error ? error.message : String(error)
         this.updateUI()
       })
+  }
+
+  private async playCinematic() {
+    this.cinematicActive = true
+    // Hide lesson UI during cinematic
+    const overlay = this.ui.shell.querySelector<HTMLElement>('.solar-overlay')
+    if (overlay) overlay.style.display = 'none'
+    const cinematic = new CinematicController(
+      this.sceneManager,
+      this.cameraController,
+      this.missions,
+      this.ui.shell,
+    )
+    await cinematic.play()
+    if (overlay) overlay.style.display = ''
+    this.cinematicActive = false
   }
 
   private handleSetAction(params: Record<string, unknown>) {
@@ -558,8 +594,8 @@ export class SolarGameRuntime {
     const visual = mission ? this.sceneManager.visuals.get(mission.id) : undefined
     this.cameraController.update(this.sceneManager.camera, this.sceneManager.controls, visual, mission)
 
-    this.sceneManager.controls.enabled = INTERACTIVE_PHASES.has(this.ctx.state.phase)
-    this.sceneManager.controls.autoRotate = this.ctx.state.phase === 'briefing' && !this.cameraController.cameraDetached
+    this.sceneManager.controls.enabled = !this.cinematicActive && INTERACTIVE_PHASES.has(this.ctx.state.phase)
+    this.sceneManager.controls.autoRotate = !this.cinematicActive && this.ctx.state.phase === 'briefing' && !this.cameraController.cameraDetached
     this.sceneManager.controls.autoRotateSpeed = 0.25
     this.sceneManager.controls.update()
 

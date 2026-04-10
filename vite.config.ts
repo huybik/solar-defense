@@ -9,6 +9,9 @@ const sdkAlias = fs.existsSync(sdkPath)
 
 export default defineConfig({
   base: './',
+  define: {
+    __IS_STANDALONE__: JSON.stringify(!fs.existsSync(sdkPath)),
+  },
   build: {
     chunkSizeWarningLimit: 800,
     rollupOptions: {
