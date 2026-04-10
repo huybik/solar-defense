@@ -7,7 +7,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
-      "@learnfun/game-sdk": ["../_sdk/src"]
+      "@learnfun/game-sdk": ["../_sdk/src", "./src/sdk-shim"]
     }
   },
   "include": ["src"]
