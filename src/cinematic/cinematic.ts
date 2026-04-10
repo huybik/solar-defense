@@ -17,6 +17,7 @@ export class CinematicController {
   private swarm = new SwarmEffect()
   private ui: CinematicUI
   private aborted = false
+  private abortController = new AbortController()
 
   constructor(
     private scene: SceneManager,
@@ -35,6 +36,7 @@ export class CinematicController {
       const done = () => {
         if (this.aborted) return
         this.aborted = true
+        this.abortController.abort()
         this.voice.stop()
         if (this.scene.scene) this.swarm.destroy(this.scene.scene)
         this.ui.destroy()
@@ -49,6 +51,18 @@ export class CinematicController {
   // ── internal ──────────────────────────────────────────
 
   private async runSequence(done: () => void) {
+    if (this.voice.needsActivation) {
+      this.ui.showText('Tap BEGIN TRANSMISSION to enable voice-over.')
+      const activated = await this.ui.waitForActionButton(
+        'BEGIN TRANSMISSION',
+        () => {},
+        { signal: this.abortController.signal },
+      )
+      this.ui.hideText()
+      if (!activated || this.aborted) return
+      await this.wait(150)
+    }
+
     for (const beat of CINEMATIC_SCRIPT) {
       if (this.aborted) return
 
@@ -64,9 +78,11 @@ export class CinematicController {
       // Show narration text + speak
       this.ui.showText(beat.text)
 
-      if (this.voice.supported) {
-        await this.voice.speak(beat.text)
-      } else {
+      const spoken = this.voice.supported
+        ? await this.voice.speak(beat.text)
+        : false
+
+      if (!spoken) {
         await this.wait(beat.holdMs)
       }
       if (this.aborted) return
@@ -79,8 +95,11 @@ export class CinematicController {
     if (this.aborted) return
 
     // Show "BEGIN YOUR MISSION" button
-    this.ui.showBeginButton()
-    this.ui.onBegin(done)
+    await this.ui.waitForActionButton(
+      'BEGIN YOUR MISSION',
+      done,
+      { hideNarration: true, signal: this.abortController.signal },
+    )
   }
 
   private flyToBeat(planetIndex: number): Promise<void> {
@@ -127,6 +146,20 @@ export class CinematicController {
   }
 
   private wait(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
+    if (this.aborted || this.abortController.signal.aborted) return Promise.resolve()
+
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => {
+        this.abortController.signal.removeEventListener('abort', handleAbort)
+        resolve()
+      }, ms)
+
+      const handleAbort = () => {
+        window.clearTimeout(timer)
+        resolve()
+      }
+
+      this.abortController.signal.addEventListener('abort', handleAbort, { once: true })
+    })
   }
 }

@@ -25,10 +25,14 @@ export class VoiceEngine {
     return this.ttsAvailable;
   }
 
-  speak(text: string): Promise<void> {
-    if (!this.ttsAvailable) return Promise.resolve();
+  get needsActivation(): boolean {
+    return this.ttsAvailable && !(navigator.userActivation?.hasBeenActive ?? false);
+  }
 
-    return new Promise<void>((resolve) => {
+  speak(text: string): Promise<boolean> {
+    if (!this.ttsAvailable || this.needsActivation) return Promise.resolve(false);
+
+    return new Promise<boolean>((resolve) => {
       speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
@@ -37,8 +41,8 @@ export class VoiceEngine {
       utterance.pitch = PITCH;
       utterance.volume = VOLUME;
 
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
+      utterance.onend = () => resolve(true);
+      utterance.onerror = () => resolve(false);
       speechSynthesis.speak(utterance);
     });
   }

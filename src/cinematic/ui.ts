@@ -1,5 +1,6 @@
 export class CinematicUI {
   private overlay: HTMLDivElement;
+  private textBox: HTMLDivElement;
   private narration: HTMLParagraphElement;
   private beginDiv: HTMLDivElement;
   private skipBtn: HTMLButtonElement;
@@ -22,6 +23,7 @@ export class CinematicUI {
       </div>
     `;
 
+    this.textBox = this.overlay.querySelector('.cinematic-text-box')!;
     this.narration = this.overlay.querySelector('.cinematic-narration')!;
     this.beginDiv = this.overlay.querySelector('.cinematic-begin')!;
     this.skipBtn = this.overlay.querySelector('.cinematic-skip')!;
@@ -39,19 +41,52 @@ export class CinematicUI {
     this.narration.classList.remove('cinematic-narration--visible');
   }
 
-  showBeginButton(): void {
+  async waitForActionButton(
+    label: string,
+    callback: () => void,
+    options: { hideNarration?: boolean; signal?: AbortSignal } = {},
+  ): Promise<boolean> {
+    if (options.signal?.aborted) return false;
+
+    this.beginBtn.textContent = label;
     this.beginDiv.style.display = '';
-    this.narration.parentElement!.style.display = 'none';
+    this.textBox.style.display = options.hideNarration ? 'none' : '';
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        this.beginBtn.removeEventListener('click', handleClick);
+        options.signal?.removeEventListener('abort', handleAbort);
+      };
+
+      const finish = (clicked: boolean) => {
+        if (settled) return;
+        settled = true;
+        release();
+        this.beginDiv.style.display = 'none';
+        this.textBox.style.display = '';
+        resolve(clicked);
+      };
+
+      const handleClick = () => {
+        callback();
+        finish(true);
+      };
+
+      const handleAbort = () => finish(false);
+
+      this.beginBtn.addEventListener('click', handleClick);
+      options.signal?.addEventListener('abort', handleAbort, { once: true });
+      this.cleanups.push(release);
+    });
   }
 
   onSkip(callback: () => void): void {
     this.skipBtn.addEventListener('click', callback);
     this.cleanups.push(() => this.skipBtn.removeEventListener('click', callback));
-  }
-
-  onBegin(callback: () => void): void {
-    this.beginBtn.addEventListener('click', callback);
-    this.cleanups.push(() => this.beginBtn.removeEventListener('click', callback));
   }
 
   destroy(): void {
