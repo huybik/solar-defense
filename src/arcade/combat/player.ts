@@ -38,6 +38,37 @@ export interface CombatInputEdges extends CombatKeys {
   pausePressed: boolean
 }
 
+export interface CombatInputHandler {
+  poll(): CombatInputEdges
+  attach(): void
+  detach(): void
+}
+
+interface CombatKeyBindingSet {
+  up: string[]
+  down: string[]
+  left: string[]
+  right: string[]
+  special: string[]
+  cycleSpecial: string[]
+  bomb: string[]
+  pause: string[]
+}
+
+interface CombatInputSource {
+  attach?(): void
+  detach?(): void
+  read(): CombatKeys
+}
+
+export interface PlayerControllerOptions {
+  spawnPosition?: Vec2
+  hullColor?: string
+  engineColor?: string
+  shieldColor?: string
+  hitboxColor?: string
+}
+
 export interface PlayerUpdateContext {
   delta: number
   elapsed: number
@@ -50,6 +81,7 @@ export interface PlayerUpdateResult extends WeaponUpdateResult {
 }
 
 export class PlayerController {
+  private readonly spawnPosition: Vec2
   private readonly group = new Group()
   private readonly hullSprite: Sprite
   private readonly engineGlow: Sprite
@@ -70,22 +102,32 @@ export class PlayerController {
 
   private readonly state: PlayerState
 
-  constructor(parent: Group, playerId: string, bullets: BulletPool, loadout = null as PlayerState['loadout'] | null, mastery: Record<string, number> = {}) {
+  constructor(
+    parent: Group,
+    playerId: string,
+    bullets: BulletPool,
+    loadout = null as PlayerState['loadout'] | null,
+    mastery: Record<string, number> = {},
+    options: PlayerControllerOptions = {},
+  ) {
     this.weapons = new WeaponController(bullets, mastery)
     const resolvedLoadout = loadout ?? createDefaultLoadout()
     const stats = buildLoadoutStats(resolvedLoadout)
+    this.spawnPosition = options.spawnPosition ?? { x: 0, y: ARENA.PLAYER_MIN_Y }
 
-    this.hullSprite = loadSprite(stats.hull.sprite, 2, 1.6)
+    this.hullSprite = loadSprite(stats.hull.sprite, 2, 1.6, {
+      color: options.hullColor,
+    })
     this.group.add(this.hullSprite)
 
-    this.engineGlow = createGlowSprite('#7ce7ff', 1.4, 1.6)
+    this.engineGlow = createGlowSprite(options.engineColor ?? '#7ce7ff', 1.4, 1.6)
     this.engineGlow.position.set(0, -0.9, -0.1)
     const engineMaterial = this.engineGlow.material as SpriteMaterial
     engineMaterial.blending = AdditiveBlending
     engineMaterial.opacity = 0.5
     this.group.add(this.engineGlow)
 
-    this.shieldGlow = createGlowSprite('#8fdfff', 2.8, 2.6)
+    this.shieldGlow = createGlowSprite(options.shieldColor ?? '#8fdfff', 2.8, 2.6)
     this.shieldGlow.visible = false
     const shieldMaterial = this.shieldGlow.material as SpriteMaterial
     shieldMaterial.blending = AdditiveBlending
@@ -94,12 +136,16 @@ export class PlayerController {
 
     this.hitboxIndicator = new Mesh(
       new RingGeometry(0.09, 0.16, 20),
-      new MeshBasicMaterial({ color: new Color('#ffffff'), transparent: true, opacity: 0 }),
+      new MeshBasicMaterial({
+        color: new Color(options.hitboxColor ?? '#ffffff'),
+        transparent: true,
+        opacity: 0,
+      }),
     )
     this.hitboxIndicator.position.z = 0.15
     this.group.add(this.hitboxIndicator)
 
-    const start = { x: 0, y: ARENA.PLAYER_MIN_Y }
+    const start = { ...this.spawnPosition }
     this.group.position.set(start.x, start.y, 0)
     parent.add(this.group)
 
@@ -334,8 +380,8 @@ export class PlayerController {
     this.state.alive = true
     this.state.respawnQueued = false
     this.state.invincibleUntil = this.elapsed + PLAYER_CONST.RESPAWN_INVULNERABLE
-    this.state.position = { x: 0, y: ARENA.PLAYER_MIN_Y }
-    this.group.position.set(0, ARENA.PLAYER_MIN_Y, 0)
+    this.state.position = { ...this.spawnPosition }
+    this.group.position.set(this.spawnPosition.x, this.spawnPosition.y, 0)
     this.group.visible = true
   }
 
@@ -462,13 +508,30 @@ export class PlayerController {
   }
 }
 
-export function createCombatKeyboardHandler(): {
-  keys: CombatKeys
-  poll(): CombatInputEdges
-  attach(): void
-  detach(): void
-} {
-  const keys: CombatKeys = {
+const PRIMARY_KEY_BINDINGS: CombatKeyBindingSet = {
+  up: ['KeyW', 'ArrowUp'],
+  down: ['KeyS', 'ArrowDown'],
+  left: ['KeyA', 'ArrowLeft'],
+  right: ['KeyD', 'ArrowRight'],
+  special: ['KeyE'],
+  cycleSpecial: ['KeyQ'],
+  bomb: ['Space', 'KeyF'],
+  pause: ['Escape'],
+}
+
+const SECONDARY_KEY_BINDINGS: CombatKeyBindingSet = {
+  up: ['KeyI'],
+  down: ['KeyK'],
+  left: ['KeyJ'],
+  right: ['KeyL'],
+  special: ['KeyO'],
+  cycleSpecial: ['KeyU'],
+  bomb: ['KeyP'],
+  pause: ['Escape'],
+}
+
+function createEmptyKeys(): CombatKeys {
+  return {
     up: false,
     down: false,
     left: false,
@@ -479,48 +542,28 @@ export function createCombatKeyboardHandler(): {
     bomb: false,
     pause: false,
   }
+}
 
-  const previous: CombatKeys = { ...keys }
+function createKeyboardSource(bindings: CombatKeyBindingSet): CombatInputSource {
+  const keys: CombatKeys = {
+    ...createEmptyKeys(),
+  }
+  const bindingLookup = new Map<string, keyof CombatKeys>()
+  for (const [binding, codes] of Object.entries(bindings) as Array<[keyof CombatKeyBindingSet, string[]]>) {
+    for (const code of codes) {
+      bindingLookup.set(code, binding)
+    }
+  }
 
   function map(code: string, down: boolean): void {
-    switch (code) {
-      case 'KeyW':
-      case 'ArrowUp':
-        keys.up = down
-        break
-      case 'KeyS':
-      case 'ArrowDown':
-        keys.down = down
-        break
-      case 'KeyA':
-      case 'ArrowLeft':
-        keys.left = down
-        break
-      case 'KeyD':
-      case 'ArrowRight':
-        keys.right = down
-        break
-      case 'Space':
-        keys.bomb = down
-        break
-      case 'KeyE':
-        keys.special = down
-        break
-      case 'KeyQ':
-        keys.cycleSpecial = down
-        break
-      case 'KeyF':
-        keys.bomb = down
-        break
-      case 'Escape':
-        keys.pause = down
-        break
-    }
+    const binding = bindingLookup.get(code)
+    if (!binding) return
+    keys[binding] = down
   }
 
   const onDown = (event: KeyboardEvent) => {
     map(event.code, true)
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
+    if (bindingLookup.has(event.code)) {
       event.preventDefault()
     }
   }
@@ -530,8 +573,86 @@ export function createCombatKeyboardHandler(): {
   }
 
   return {
-    keys,
+    read: () => ({ ...keys }),
+    attach() {
+      window.addEventListener('keydown', onDown)
+      window.addEventListener('keyup', onUp)
+    },
+    detach() {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      Object.keys(keys).forEach((key) => { (keys as Record<string, boolean>)[key] = false })
+    },
+  }
+}
+
+function createGamepadSource(options: { preferredIndex?: number | null; fallbackToFirstConnected?: boolean } = {}): CombatInputSource {
+  const deadzone = 0.35
+
+  const resolveGamepad = (): Gamepad | null => {
+    const gamepads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : []
+    if (!gamepads) return null
+
+    const preferredIndex = options.preferredIndex ?? null
+    if (preferredIndex != null) {
+      const preferred = gamepads[preferredIndex]
+      if (preferred?.connected) return preferred
+    }
+
+    if (!options.fallbackToFirstConnected) return null
+
+    for (const gamepad of gamepads) {
+      if (gamepad?.connected) return gamepad
+    }
+    return null
+  }
+
+  return {
+    read() {
+      const keys = createEmptyKeys()
+      const gamepad = resolveGamepad()
+      if (!gamepad) return keys
+
+      const axisX = gamepad.axes[0] ?? 0
+      const axisY = gamepad.axes[1] ?? 0
+      const buttonPressed = (index: number) => Boolean(gamepad.buttons[index]?.pressed)
+
+      keys.left = axisX <= -deadzone || buttonPressed(14)
+      keys.right = axisX >= deadzone || buttonPressed(15)
+      keys.up = axisY <= -deadzone || buttonPressed(12)
+      keys.down = axisY >= deadzone || buttonPressed(13)
+      keys.special = buttonPressed(0)
+      keys.cycleSpecial = buttonPressed(5) || buttonPressed(4) || buttonPressed(3)
+      keys.bomb = buttonPressed(1) || buttonPressed(2)
+      keys.pause = buttonPressed(9)
+      return keys
+    },
+  }
+}
+
+function createCombatInputHandler(sources: CombatInputSource[]): CombatInputHandler {
+  const previous = createEmptyKeys()
+
+  const readMergedKeys = (): CombatKeys => {
+    const next = createEmptyKeys()
+    for (const source of sources) {
+      const keys = source.read()
+      next.up ||= keys.up
+      next.down ||= keys.down
+      next.left ||= keys.left
+      next.right ||= keys.right
+      next.fire ||= keys.fire
+      next.special ||= keys.special
+      next.cycleSpecial ||= keys.cycleSpecial
+      next.bomb ||= keys.bomb
+      next.pause ||= keys.pause
+    }
+    return next
+  }
+
+  return {
     poll() {
+      const keys = readMergedKeys()
       const result: CombatInputEdges = {
         ...keys,
         fire: true,
@@ -545,14 +666,28 @@ export function createCombatKeyboardHandler(): {
       return result
     },
     attach() {
-      window.addEventListener('keydown', onDown)
-      window.addEventListener('keyup', onUp)
+      for (const source of sources) source.attach?.()
     },
     detach() {
-      window.removeEventListener('keydown', onDown)
-      window.removeEventListener('keyup', onUp)
-      Object.keys(keys).forEach((key) => { (keys as Record<string, boolean>)[key] = false })
+      for (const source of sources) source.detach?.()
       Object.keys(previous).forEach((key) => { (previous as Record<string, boolean>)[key] = false })
     },
   }
+}
+
+export function createPrimaryCombatInputHandler(): CombatInputHandler {
+  return createCombatInputHandler([
+    createKeyboardSource(PRIMARY_KEY_BINDINGS),
+  ])
+}
+
+export function createSecondaryCombatInputHandler(): CombatInputHandler {
+  return createCombatInputHandler([
+    createKeyboardSource(SECONDARY_KEY_BINDINGS),
+    createGamepadSource({ fallbackToFirstConnected: true }),
+  ])
+}
+
+export function createCombatKeyboardHandler(): CombatInputHandler {
+  return createPrimaryCombatInputHandler()
 }

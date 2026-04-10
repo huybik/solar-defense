@@ -62,7 +62,7 @@ export class PickupManager {
     this.pickups.push(entity)
   }
 
-  update(delta: number, attractPoint?: Vec2 | null, attractRadius = 0): void {
+  update(delta: number, attractors: Array<{ point: Vec2; radius: number }> = []): void {
     for (const pickup of this.pickups) {
       if (!pickup.alive) continue
 
@@ -70,9 +70,12 @@ export class PickupManager {
       pickup.position.x += pickup.velocity.x * delta
       pickup.position.y += pickup.velocity.y * delta
 
-      if (attractPoint && circleHit(pickup.position.x, pickup.position.y, 0, attractPoint.x, attractPoint.y, attractRadius)) {
-        const dx = attractPoint.x - pickup.position.x
-        const dy = attractPoint.y - pickup.position.y
+      const attractor = attractors.find(({ point, radius }) =>
+        circleHit(pickup.position.x, pickup.position.y, 0, point.x, point.y, radius),
+      )
+      if (attractor) {
+        const dx = attractor.point.x - pickup.position.x
+        const dy = attractor.point.y - pickup.position.y
         const length = Math.hypot(dx, dy) || 1
         pickup.velocity.x += (dx / length) * delta * 28
         pickup.velocity.y += (dy / length) * delta * 28

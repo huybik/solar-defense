@@ -6,6 +6,7 @@ export type PartCategory = 'gun' | 'engine' | 'wing' | 'cockpit'
 
 export interface ActivePowerUp {
   id: number
+  ownerId: string
   label: string
   category: PartCategory
   type: 'trial' | 'boost' | 'stat'
@@ -24,6 +25,18 @@ export interface ActivePowerUp {
 export interface PowerUpDrop {
   sprite: string
   dropId: number
+}
+
+export interface PowerUpOwner {
+  playerId: string
+  loadout: PlayerLoadout
+  playerState: PlayerState
+}
+
+interface PowerUpOwnerRef {
+  playerId: string
+  loadout?: PlayerLoadout
+  playerState?: PlayerState
 }
 
 const POWERUP_DURATION = 30
@@ -105,6 +118,7 @@ export class PowerUpManager {
 
   /** Apply a previously rolled power-up. Returns display label. */
   apply(loadout: PlayerLoadout, playerState: PlayerState, dropId: number): string {
+    const ownerId = playerState.id
     const pending = this.pending.get(dropId)
     this.pending.delete(dropId)
     if (!pending) return 'POWER SURGE!'
@@ -114,31 +128,33 @@ export class PowerUpManager {
     switch (pending.category) {
       case 'gun':
       case 'wing':
-        return this.applyWeapon(loadout, pending, duration)
+        return this.applyWeapon(ownerId, loadout, pending, duration)
       case 'engine':
-        return this.applyEngineStat(playerState, duration)
+        return this.applyEngineStat(ownerId, playerState, duration)
       case 'cockpit':
-        return this.applyCockpitStat(playerState, duration)
+        return this.applyCockpitStat(ownerId, playerState, duration)
     }
   }
 
-  update(delta: number, loadout: PlayerLoadout, playerState: PlayerState): void {
+  update(delta: number, owners: PowerUpOwner[]): void {
     for (const pu of this.active) pu.remaining -= delta
-    this.revertExpired(loadout, playerState)
+    this.revertExpired(owners)
   }
 
-  getActive(): ActivePowerUp[] {
-    return this.active
+  getActive(playerId?: string): ActivePowerUp[] {
+    return playerId
+      ? this.active.filter((pu) => pu.ownerId === playerId)
+      : this.active
   }
 
-  getBonusWeapons(): Array<{ slot: WeaponSlot; weaponId: string }> {
+  getBonusWeapons(playerId: string): Array<{ slot: WeaponSlot; weaponId: string }> {
     return this.active
-      .filter((pu) => pu.type === 'trial' && pu.slot != null && pu.weaponId != null)
+      .filter((pu) => pu.ownerId === playerId && pu.type === 'trial' && pu.slot != null && pu.weaponId != null)
       .map((pu) => ({ slot: pu.slot!, weaponId: pu.weaponId! }))
   }
 
-  clear(loadout: PlayerLoadout, playerState: PlayerState): void {
-    for (const pu of [...this.active]) this.revert(pu, loadout, playerState)
+  clear(owners: PowerUpOwner[]): void {
+    for (const pu of [...this.active]) this.revert(pu, owners)
     this.active.length = 0
   }
 
@@ -157,25 +173,26 @@ export class PowerUpManager {
     return cats
   }
 
-  private applyWeapon(loadout: PlayerLoadout, pending: PendingDrop, duration: number): string {
+  private applyWeapon(ownerId: string, loadout: PlayerLoadout, pending: PendingDrop, duration: number): string {
     if (pending.trialPick) {
-      return this.applyTrial(loadout, pending.trialPick, duration, pending.category)
+      return this.applyTrial(ownerId, loadout, pending.trialPick, duration, pending.category)
     }
     if (pending.boostPick) {
-      return this.applyBoost(loadout, pending.boostPick, duration, pending.category)
+      return this.applyBoost(ownerId, loadout, pending.boostPick, duration, pending.category)
     }
     return 'POWER SURGE!'
   }
 
   private applyTrial(
+    ownerId: string,
     loadout: PlayerLoadout,
     pick: { slot: WeaponSlot; weaponId: string },
     duration: number,
     category: PartCategory,
   ): string {
-    const existing = this.active.find((p) => p.slot === pick.slot && p.type === 'trial')
+    const existing = this.active.find((p) => p.ownerId === ownerId && p.slot === pick.slot && p.type === 'trial')
     if (existing) {
-      this.revert(existing, loadout, null)
+      this.revert(existing, [{ playerId: ownerId, loadout }])
       this.active.splice(this.active.indexOf(existing), 1)
     }
 
@@ -183,6 +200,7 @@ export class PowerUpManager {
     if (!def) return 'POWER SURGE!'
     const pu: ActivePowerUp = {
       id: this.nextId++,
+      ownerId,
       label: `TRIAL: ${def.name}`,
       category,
       slot: pick.slot,
@@ -204,14 +222,15 @@ export class PowerUpManager {
   }
 
   private applyBoost(
+    ownerId: string,
     loadout: PlayerLoadout,
     pick: { slot: WeaponSlot; weaponId: string; currentLevel: number; maxLevel: number },
     duration: number,
     category: PartCategory,
   ): string {
-    const existing = this.active.find((p) => p.slot === pick.slot && p.type === 'boost')
+    const existing = this.active.find((p) => p.ownerId === ownerId && p.slot === pick.slot && p.type === 'boost')
     if (existing) {
-      this.revert(existing, loadout, null)
+      this.revert(existing, [{ playerId: ownerId, loadout }])
       this.active.splice(this.active.indexOf(existing), 1)
     }
 
@@ -223,6 +242,7 @@ export class PowerUpManager {
     if (!def) return 'POWER SURGE!'
     const pu: ActivePowerUp = {
       id: this.nextId++,
+      ownerId,
       label: `${def.name} +${boost}`,
       category,
       slot: pick.slot,
@@ -239,16 +259,17 @@ export class PowerUpManager {
     return pu.label
   }
 
-  private applyEngineStat(playerState: PlayerState, duration: number): string {
-    const existing = this.active.find((p) => p.category === 'engine' && p.type === 'stat')
+  private applyEngineStat(ownerId: string, playerState: PlayerState, duration: number): string {
+    const existing = this.active.find((p) => p.ownerId === ownerId && p.category === 'engine' && p.type === 'stat')
     if (existing) {
-      this.revert(existing, null, playerState)
+      this.revert(existing, [{ playerId: ownerId, playerState }])
       this.active.splice(this.active.indexOf(existing), 1)
     }
 
     const delta = 3 + Math.floor(Math.random() * 4) // +3 to +6 energy regen
     const pu: ActivePowerUp = {
       id: this.nextId++,
+      ownerId,
       label: `ENERGY REGEN +${delta}`,
       category: 'engine',
       type: 'stat',
@@ -263,16 +284,17 @@ export class PowerUpManager {
     return pu.label
   }
 
-  private applyCockpitStat(playerState: PlayerState, duration: number): string {
-    const existing = this.active.find((p) => p.category === 'cockpit' && p.type === 'stat')
+  private applyCockpitStat(ownerId: string, playerState: PlayerState, duration: number): string {
+    const existing = this.active.find((p) => p.ownerId === ownerId && p.category === 'cockpit' && p.type === 'stat')
     if (existing) {
-      this.revert(existing, null, playerState)
+      this.revert(existing, [{ playerId: ownerId, playerState }])
       this.active.splice(this.active.indexOf(existing), 1)
     }
 
     const delta = 10 + Math.floor(Math.random() * 15) // +10 to +24 shield
     const pu: ActivePowerUp = {
       id: this.nextId++,
+      ownerId,
       label: `SHIELD +${delta}`,
       category: 'cockpit',
       type: 'stat',
@@ -291,7 +313,6 @@ export class PowerUpManager {
   private trialCandidates(loadout: PlayerLoadout, slots: WeaponSlot[]): Array<{ slot: WeaponSlot; weaponId: string }> {
     const results: Array<{ slot: WeaponSlot; weaponId: string }> = []
     for (const slot of slots) {
-      if (this.active.some((p) => p.slot === slot && p.type === 'trial')) continue
       for (const w of WEAPON_LIST) {
         if (!slotMatchesWeapon(slot, w.slot)) continue
         if (loadout.ownedWeapons.includes(w.id)) continue
@@ -305,7 +326,6 @@ export class PowerUpManager {
   private boostCandidates(loadout: PlayerLoadout, slots: WeaponSlot[]): Array<{ slot: WeaponSlot; weaponId: string; currentLevel: number; maxLevel: number }> {
     const results: Array<{ slot: WeaponSlot; weaponId: string; currentLevel: number; maxLevel: number }> = []
     for (const slot of slots) {
-      if (this.active.some((p) => p.slot === slot && p.type === 'boost')) continue
       const weaponId = loadout.weapons[slot]
       if (!weaponId) continue
       const def = getWeaponDef(weaponId)
@@ -318,15 +338,19 @@ export class PowerUpManager {
     return results
   }
 
-  private revertExpired(loadout: PlayerLoadout, playerState: PlayerState): void {
+  private revertExpired(owners: PowerUpOwner[]): void {
     for (let i = this.active.length - 1; i >= 0; i--) {
       if (this.active[i].remaining > 0) continue
-      this.revert(this.active[i], loadout, playerState)
+      this.revert(this.active[i], owners)
       this.active.splice(i, 1)
     }
   }
 
-  private revert(pu: ActivePowerUp, loadout: PlayerLoadout | null, playerState: PlayerState | null): void {
+  private revert(pu: ActivePowerUp, owners: PowerUpOwnerRef[]): void {
+    const owner = owners.find((candidate) => candidate.playerId === pu.ownerId)
+    const loadout = owner?.loadout ?? null
+    const playerState = owner?.playerState ?? null
+
     if (pu.type === 'trial' && loadout) {
       if (pu.originalLevel! < 0 && !loadout.ownedWeapons.includes(pu.weaponId!)) {
         delete loadout.weaponLevels[pu.weaponId!]

@@ -13,6 +13,22 @@ export type ArcadePhase =
 export type ArcadeRunMode = 'campaign' | 'quickplay'
 export type Medal = 'none' | 'bronze' | 'silver' | 'gold' | 'platinum'
 
+export interface CombatPlayerStatus {
+  id: string
+  label: string
+  health: number
+  maxHealth: number
+  shield: number
+  maxShield: number
+  energy: number
+  maxEnergy: number
+  lives: number
+  bombs: number
+  specialName: string
+  specialAmmo: number
+  alive: boolean
+}
+
 export interface DebriefData {
   success: boolean
   levelId: string
@@ -60,13 +76,14 @@ export interface ArcadeState {
   elapsed: number
   specialName: string
   specialAmmo: number
+  players: CombatPlayerStatus[]
   synergy: string | null
   knownSynergies: string[]
   discoveredSecrets: string[]
   comms: string[]
   currentTab: string
   debrief: DebriefData | null
-  powerups: Array<{ label: string; remaining: number; duration: number }>
+  powerups: Array<{ playerId: string; label: string; remaining: number; duration: number }>
 }
 
 export type ArcadeEvent =

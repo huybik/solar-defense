@@ -48,6 +48,7 @@ export function createDefaultArcadeState(): ArcadeState {
     elapsed: 0,
     specialName: '',
     specialAmmo: 0,
+    players: [],
     synergy: null,
     knownSynergies: [],
     discoveredSecrets: [],
@@ -67,6 +68,30 @@ export function buildCombatState(
   const bossName = snapshot.boss?.alive && level.bossId
     ? getBossDef(level.bossId).name
     : ''
+  const players = snapshot.players.map((player, index) => ({
+    id: player.id,
+    label: `P${index + 1}`,
+    health: player.health,
+    maxHealth: player.maxHealth,
+    shield: player.shield,
+    maxShield: player.maxShield,
+    energy: player.energy,
+    maxEnergy: player.maxEnergy,
+    lives: player.lives,
+    bombs: player.bombs,
+    specialName: player.loadout.activeSpecial
+      ? prettyId(player.loadout.activeSpecial)
+      : 'None',
+    specialAmmo: player.loadout.activeSpecial
+      ? (player.loadout.specialAmmo[player.loadout.activeSpecial] ?? 0)
+      : 0,
+    alive: player.alive,
+  }))
+  const primary = players[0]
+  const knownSynergies = Array.from(new Set(
+    snapshot.players.flatMap((player) => player.loadout.knownSynergies),
+  ))
+  const powerups = snapshot.powerups
 
   return {
     ...currentState,
@@ -78,14 +103,14 @@ export function buildCombatState(
     totalWaves: snapshot.totalWaves,
     score: snapshot.score + campaignScore,
     credits: snapshot.credits,
-    lives: snapshot.player.lives,
-    bombs: snapshot.player.bombs,
-    health: snapshot.player.health,
-    maxHealth: snapshot.player.maxHealth,
-    shield: snapshot.player.shield,
-    maxShield: snapshot.player.maxShield,
-    energy: snapshot.player.energy,
-    maxEnergy: snapshot.player.maxEnergy,
+    lives: primary?.lives ?? 0,
+    bombs: primary?.bombs ?? 0,
+    health: primary?.health ?? 0,
+    maxHealth: primary?.maxHealth ?? 0,
+    shield: primary?.shield ?? 0,
+    maxShield: primary?.maxShield ?? 0,
+    energy: primary?.energy ?? 0,
+    maxEnergy: primary?.maxEnergy ?? 0,
     combo: snapshot.combo,
     grazeCount: snapshot.grazeCount,
     accuracy: snapshot.accuracy,
@@ -94,17 +119,14 @@ export function buildCombatState(
     bossMaxHealth: snapshot.boss?.maxHealth ?? 0,
     bossPhase: snapshot.boss?.phase ?? 0,
     elapsed: snapshot.elapsed,
-    specialName: snapshot.player.loadout.activeSpecial
-      ? prettyId(snapshot.player.loadout.activeSpecial)
-      : '',
-    specialAmmo: snapshot.player.loadout.activeSpecial
-      ? (snapshot.player.loadout.specialAmmo[snapshot.player.loadout.activeSpecial] ?? 0)
-      : 0,
+    specialName: primary?.specialName ?? '',
+    specialAmmo: primary?.specialAmmo ?? 0,
+    players,
     synergy: snapshot.synergy,
-    knownSynergies: snapshot.player.loadout.knownSynergies,
+    knownSynergies,
     discoveredSecrets: snapshot.discoveredSecrets,
     comms: snapshot.comms,
-    powerups: snapshot.powerups,
+    powerups,
   }
 }
 
@@ -216,7 +238,7 @@ export function combatEventMessage(event: ArcadeEvent): string | null {
     case 'synergy_discovered':
       return `Synergy discovered: ${event.combo}.`
     case 'player_down':
-      return 'Hull breach. Respawn sequence engaged.'
+      return `${event.playerId === 'player_1' ? 'P2' : 'P1'} hull breach. Respawn sequence engaged.`
     case 'challenge_complete':
     case 'wave_clear':
     case 'boss_defeated':
@@ -225,6 +247,7 @@ export function combatEventMessage(event: ArcadeEvent): string | null {
     case 'pickup_collected':
     case 'stage_clear':
     case 'stage_failed':
+    case 'portal_entered':
       return null
   }
 }

@@ -11,7 +11,7 @@ import { EnemyManager } from './enemies'
 import { getLevelDef } from '../data/levels'
 import { MeteorManager } from './meteors'
 import { PickupManager } from './pickups'
-import { PowerUpManager, POWERUP_DROP_CHANCE } from './power-ups'
+import { PowerUpManager, POWERUP_DROP_CHANCE, type PowerUpOwner } from './power-ups'
 import {
   createCombatScoreState,
   recordShotFired,
@@ -23,7 +23,12 @@ import {
 } from '../progression/scoring'
 import { TerrainManager } from './terrain'
 import { VFXManager } from '../render/vfx'
-import { PlayerController, createCombatKeyboardHandler } from './player'
+import {
+  PlayerController,
+  createPrimaryCombatInputHandler,
+  createSecondaryCombatInputHandler,
+  type CombatInputHandler,
+} from './player'
 import {
   applyDamageModifiers,
   applyFlatBossUpgradeEffects,
@@ -90,11 +95,12 @@ export interface ArenaSnapshot {
   grazeCount: number
   accuracy: number
   player: ReturnType<PlayerController['getState']>
+  players: Array<ReturnType<PlayerController['getState']>>
   boss: BossEntity | null
   synergy: string | null
   discoveredSecrets: string[]
   comms: string[]
-  powerups: Array<{ label: string; remaining: number; duration: number }>
+  powerups: Array<{ playerId: string; label: string; remaining: number; duration: number }>
 }
 
 export class Arena {
@@ -103,7 +109,8 @@ export class Arena {
   private readonly background: BackgroundController
   private readonly playerBullets: BulletPool
   private readonly enemyBullets: BulletPool
-  private readonly player: PlayerController
+  private readonly players: PlayerController[]
+  private readonly inputs: CombatInputHandler[]
   private readonly enemies: EnemyManager
   private readonly meteors: MeteorManager
   private readonly terrain: TerrainManager
@@ -111,7 +118,6 @@ export class Arena {
   private readonly vfx: VFXManager
   private readonly audio: ArcadeAudio
   private readonly powerups: PowerUpManager
-  private readonly keyboard = createCombatKeyboardHandler()
   private readonly scoreState
   private readonly difficulty
   private readonly level: LevelDef
@@ -137,8 +143,8 @@ export class Arena {
   private clearDelay = 0
   private fillerTimer = 0
   private readonly fillerInterval = 6
-  private grazeSet = new Set<number>()
-  private shieldBreakPlayed = false
+  private grazeSet = new Set<string>()
+  private shieldBreakPlayed = new Set<string>()
   private secretProgress = 0
   private readonly earnedUpgrades: string[] = []
   private portal: Portal | null = null
@@ -171,8 +177,42 @@ export class Arena {
 
     this.playerBullets = new BulletPool(this.group)
     this.enemyBullets = new BulletPool(this.group)
-    this.player = new PlayerController(this.group, 'player_0', this.playerBullets, JSON.parse(JSON.stringify(campaign.inventory)), campaign.weaponMastery ?? {})
-    applyFlatBossUpgradeEffects(this.player.getState(), campaign.bossUpgrades ?? [])
+    this.players = [
+      new PlayerController(
+        this.group,
+        'player_0',
+        this.playerBullets,
+        JSON.parse(JSON.stringify(campaign.inventory)),
+        campaign.weaponMastery ?? {},
+        {
+          spawnPosition: { x: -7, y: ARENA.PLAYER_MIN_Y + 1.2 },
+          engineColor: '#7ce7ff',
+          shieldColor: '#8fdfff',
+          hitboxColor: '#e8fbff',
+        },
+      ),
+      new PlayerController(
+        this.group,
+        'player_1',
+        this.playerBullets,
+        JSON.parse(JSON.stringify(campaign.inventory)),
+        campaign.weaponMastery ?? {},
+        {
+          spawnPosition: { x: 7, y: ARENA.PLAYER_MIN_Y + 1.2 },
+          hullColor: '#ffe3b0',
+          engineColor: '#ffb86c',
+          shieldColor: '#ffd998',
+          hitboxColor: '#ffeabf',
+        },
+      ),
+    ]
+    this.inputs = [
+      createPrimaryCombatInputHandler(),
+      createSecondaryCombatInputHandler(),
+    ]
+    for (const player of this.players) {
+      applyFlatBossUpgradeEffects(player.getState(), campaign.bossUpgrades ?? [])
+    }
     this.enemies = new EnemyManager(this.group, this.enemyBullets, this.level.planet)
     this.enemies.setDifficulty(this.difficulty)
     this.enemies.setProgressionHealth(this.enemyHealthProgression())
@@ -183,7 +223,7 @@ export class Arena {
     this.vfx = new VFXManager(this.group)
     this.audio = new ArcadeAudio()
 
-    this.keyboard.attach()
+    for (const input of this.inputs) input.attach()
     this.audio.ui()
 
     this.isFinalLevel = getNextMainLevel(levelId) === null
@@ -196,7 +236,7 @@ export class Arena {
   update(delta: number): ArcadeEvent[] {
     if (this.result.ended) return []
 
-    const input = this.keyboard.poll()
+    const inputs = this.inputs.map((input) => input.poll())
     this.elapsed += delta
     const events: ArcadeEvent[] = [...this.result.events]
     this.result.events = []
@@ -213,25 +253,44 @@ export class Arena {
     this.processFillerSpawns(delta)
     this.updateWaves(events)
 
-    const playerUpdate = this.player.update(input, {
-      delta,
-      elapsed: this.elapsed,
-      findEnemy: (position) => this.findNearestEnemy(position),
+    const activeSynergies: string[] = []
+    let usedSpecial = false
+    this.players.forEach((player, index) => {
+      const playerUpdate = player.update(inputs[index], {
+        delta,
+        elapsed: this.elapsed,
+        findEnemy: (position) => this.findNearestEnemy(position),
+      })
+      if (playerUpdate.shotsFired > 0) {
+        recordShotFired(this.scoreState, playerUpdate.shotsFired)
+      }
+      if (playerUpdate.synergy) {
+        activeSynergies.push(`P${index + 1} ${playerUpdate.synergy}`)
+      }
+      if (playerUpdate.discoveredSynergy) {
+        const combo = `P${index + 1} ${playerUpdate.discoveredSynergy}`
+        this.latestComms = [`SYNERGY DISCOVERED: ${combo}`]
+        events.push({ type: 'synergy_discovered', combo })
+        this.audio.combo()
+      }
+      if (playerUpdate.usedBomb) {
+        this.handleBomb(player, events)
+      }
+      if (playerUpdate.usedSpecial) {
+        usedSpecial = true
+      }
+      if (playerUpdate.respawned) {
+        const state = player.getState()
+        events.push({ type: 'player_respawn', playerId: state.id, lives: state.lives })
+      }
     })
-    if (playerUpdate.shotsFired > 0) {
-      recordShotFired(this.scoreState, playerUpdate.shotsFired)
-    }
-    this.activeSynergy = playerUpdate.synergy
-    if (playerUpdate.discoveredSynergy) {
-      this.latestComms = [`SYNERGY DISCOVERED: ${playerUpdate.discoveredSynergy}`]
-      events.push({ type: 'synergy_discovered', combo: playerUpdate.discoveredSynergy })
-      this.audio.combo()
-    }
-    if (playerUpdate.usedBomb) {
-      this.handleBomb(events)
-    }
-    if (playerUpdate.usedSpecial) {
-      this.audio.missile()
+    this.activeSynergy = activeSynergies.length > 0 ? activeSynergies.join(' | ') : null
+    if (usedSpecial) this.audio.missile()
+
+    const powerUpOwners = this.getPowerUpOwners()
+    this.powerups.update(delta, powerUpOwners)
+    for (const player of this.players) {
+      player.setBonusWeapons(this.powerups.getBonusWeapons(player.getState().id))
     }
 
     this.updateHazards(delta)
@@ -243,9 +302,7 @@ export class Arena {
     this.meteors.update(delta)
     this.terrain.update({ delta })
     this.cacheDamageableTargets()
-    this.pickups.update(delta, this.player.getState().position, this.currentPickupMagnetRadius())
-    this.powerups.update(delta, this.player.getState().loadout, this.player.getState())
-    this.player.setBonusWeapons(this.powerups.getBonusWeapons())
+    this.pickups.update(delta, this.getPickupMagnets())
     this.playerBullets.update(delta, {
       findTarget: (position, preferredId) => this.findCachedTarget(this._cachedPlayerHomingTargets, position, preferredId),
       getAnchor: (anchorId) => this.resolveAnchor(anchorId),
@@ -291,7 +348,10 @@ export class Arena {
 
     if (this.portal) {
       this.portal.update(delta)
-      if (this.player.getState().alive && this.portal.checkCollision(this.player.getState().position)) {
+      if (this.players.some((player) => {
+        const state = player.getState()
+        return state.alive && this.portal?.checkCollision(state.position)
+      })) {
         events.push({ type: 'portal_entered' })
         this.portal.dispose()
         this.portal = null
@@ -299,7 +359,10 @@ export class Arena {
       }
     }
 
-    if (!this.player.getState().alive && this.player.getState().lives <= 0) {
+    if (this.players.every((player) => {
+      const state = player.getState()
+      return !state.alive && state.lives <= 0
+    })) {
       this.beginClear(false)
     }
 
@@ -314,8 +377,10 @@ export class Arena {
   }
 
   getSnapshot(): ArenaSnapshot {
-    const player = this.player.getState()
-    const accuracy = player.shotsFired > 0 ? (player.shotsHit / player.shotsFired) * 100 : 100
+    const players = this.players.map((player) => player.getState())
+    const accuracy = this.scoreState.shotsFired > 0
+      ? (this.scoreState.shotsHit / this.scoreState.shotsFired) * 100
+      : 100
     return {
       levelId: this.level.id,
       levelName: this.level.name,
@@ -328,12 +393,18 @@ export class Arena {
       combo: this.scoreState.combo,
       grazeCount: this.scoreState.grazeCount,
       accuracy,
-      player,
+      player: players[0],
+      players,
       boss: this.boss?.getState() ?? null,
       synergy: this.activeSynergy,
       discoveredSecrets: this.discoveredSecrets,
       comms: this.latestComms,
-      powerups: this.powerups.getActive().map((pu) => ({ label: pu.label, remaining: pu.remaining, duration: pu.duration })),
+      powerups: this.powerups.getActive().map((pu) => ({
+        playerId: pu.ownerId,
+        label: pu.label,
+        remaining: pu.remaining,
+        duration: pu.duration,
+      })),
     }
   }
 
@@ -350,7 +421,7 @@ export class Arena {
   }
 
   getResultLoadout(): CampaignState['inventory'] {
-    return this.player.getState().loadout
+    return this.players[0].getState().loadout
   }
 
   getCollectedLogs(): string[] {
@@ -373,7 +444,7 @@ export class Arena {
     if (this.result.ended) return []
 
     this.result.success = success
-    this.powerups.clear(this.player.getState().loadout, this.player.getState())
+    this.powerups.clear(this.getPowerUpOwners())
     const finalized = finalizeCombatResult(this.result.success, this.level, this.elapsed, this.scoreState)
     this.result = finalized.result
     this.levelDebrief = finalized.debrief
@@ -381,9 +452,9 @@ export class Arena {
   }
 
   dispose(): void {
-    this.keyboard.detach()
+    for (const input of this.inputs) input.detach()
     this.background.dispose()
-    this.player.dispose()
+    for (const player of this.players) player.dispose()
     this.enemies.dispose()
     this.meteors.dispose()
     this.terrain.dispose()
@@ -436,12 +507,15 @@ export class Arena {
         radius: Math.max(projectile.radius, projectile.proximityRadius || 0.8),
       })
     }
-    const player = this.player.getState()
-    this._cachedEnemyHomingTargets.push({
-      id: `player:${player.id}`,
-      position: player.position,
-      radius: player.radius,
-    })
+    for (const player of this.players) {
+      const state = player.getState()
+      if (!state.alive) continue
+      this._cachedEnemyHomingTargets.push({
+        id: `player:${state.id}`,
+        position: state.position,
+        radius: state.radius,
+      })
+    }
   }
 
   private findCachedTarget(targets: HomingTarget[], position: Vec2, preferredId?: string): HomingTarget | null {
@@ -575,19 +649,21 @@ export class Arena {
 
   private applyBossPull(delta: number): void {
     if (!this.boss || this.boss.getPullStrength() <= 0) return
-    const player = this.player.getState()
     const bossState = this.boss.getState()
-    const dx = bossState.position.x - player.position.x
-    const dy = bossState.position.y - player.position.y
-    const distance = Math.hypot(dx, dy) || 1
-    this.player.nudge(
-      (dx / distance) * this.boss.getPullStrength() * delta * 0.2,
-      (dy / distance) * this.boss.getPullStrength() * delta * 0.2,
-    )
+    for (const player of this.players) {
+      const state = player.getState()
+      if (!state.alive) continue
+      const dx = bossState.position.x - state.position.x
+      const dy = bossState.position.y - state.position.y
+      const distance = Math.hypot(dx, dy) || 1
+      player.nudge(
+        (dx / distance) * this.boss.getPullStrength() * delta * 0.2,
+        (dy / distance) * this.boss.getPullStrength() * delta * 0.2,
+      )
+    }
   }
 
   private handleCollisions(events: ArcadeEvent[]): void {
-    const playerState = this.player.getState()
     const playerProjectiles = this._cachedPlayerProjectiles
     const enemyProjectiles = this._cachedEnemyProjectiles
 
@@ -597,15 +673,7 @@ export class Arena {
     this.handleBodyCollisions(events)
     this.handlePickups(events)
     this.handleGrazing(enemyProjectiles)
-
-    if (playerState.maxShield <= 0) {
-      this.shieldBreakPlayed = false
-    } else if (playerState.shield > 0) {
-      this.shieldBreakPlayed = false
-    } else if (!this.shieldBreakPlayed) {
-      this.shieldBreakPlayed = true
-      this.audio.shieldBreak()
-    }
+    this.trackShieldBreaks()
   }
 
   private handlePlayerProjectiles(projectiles: ProjectileEntity[], events: ArcadeEvent[]): void {
@@ -623,7 +691,7 @@ export class Arena {
       for (const target of targets) {
         if (!target.entity.alive) continue
         if (!circleHit(projectile.position.x, projectile.position.y, projectile.radius, target.entity.position.x, target.entity.position.y, target.entity.radius)) continue
-        this.player.recordHit()
+        this.recordPlayerProjectileHit(projectile)
         recordShotHit(this.scoreState)
         const result = target.hit(target.entity, this.applyDamageMods(projectile.damage, false))
         this.handleKillResult(result, target.kind, events, projectile.weaponId)
@@ -648,7 +716,7 @@ export class Arena {
         bossState.position.y,
         bossState.radius,
       )) {
-        this.player.recordHit()
+        this.recordPlayerProjectileHit(projectile)
         recordShotHit(this.scoreState)
         this.boss.hit(this.applyDamageMods(projectile.damage, true))
         if (projectile.type === 'missile' || projectile.type === 'flare') {
@@ -675,7 +743,7 @@ export class Arena {
       if (!target.entity.alive) continue
       if (Math.abs(target.entity.position.x - projectile.position.x) > projectile.radius + target.entity.radius) continue
       if (target.entity.position.y < beamBottom || target.entity.position.y > beamTop) continue
-      this.player.recordHit()
+      this.recordPlayerProjectileHit(projectile)
       recordShotHit(this.scoreState)
       const result = target.hit(target.entity, this.applyDamageMods(projectile.damage * 0.35, false))
       this.applySlowEffect(projectile, target.entity as any)
@@ -684,7 +752,7 @@ export class Arena {
     if (boss && !boss.isDefeated()) {
       const state = boss.getState()
       if (Math.abs(state.position.x - projectile.position.x) <= projectile.radius + state.radius) {
-        this.player.recordHit()
+        this.recordPlayerProjectileHit(projectile)
         recordShotHit(this.scoreState)
         boss.hit(this.applyDamageMods(projectile.damage * 0.35, true))
       }
@@ -699,7 +767,7 @@ export class Arena {
         for (const enemy of this._cachedEnemies) {
           if (!enemy.alive) continue
           if (!circleHit(projectile.position.x, projectile.position.y, projectile.radius, enemy.position.x, enemy.position.y, enemy.radius)) continue
-          this.player.recordHit()
+          this.recordPlayerProjectileHit(projectile)
           recordShotHit(this.scoreState)
           const result = this.enemies.hit(enemy, this.applyDamageMods(projectile.damage * 0.22, false))
           this.applySlowEffect(projectile, enemy)
@@ -712,7 +780,7 @@ export class Arena {
         for (const target of targets) {
           if (!target.entity.alive) continue
           if (!circleHit(projectile.position.x, projectile.position.y, projectile.fieldRadius, target.entity.position.x, target.entity.position.y, target.entity.radius)) continue
-          this.player.recordHit()
+          this.recordPlayerProjectileHit(projectile)
           recordShotHit(this.scoreState)
           const result = target.hit(target.entity, this.applyDamageMods(projectile.damage * 0.08, false))
           this.applySlowEffect(projectile, target.entity as any)
@@ -733,7 +801,6 @@ export class Arena {
   }
 
   private handleEnemyProjectiles(projectiles: ProjectileEntity[], events: ArcadeEvent[]): void {
-    const player = this.player.getState()
     const shieldDrones = this._cachedPlayerProjectiles.filter(
       (candidate) => candidate.weaponId === 'shield_drone' && candidate.type === 'orbit',
     )
@@ -762,26 +829,25 @@ export class Arena {
         continue
       }
 
-      const hit = projectile.type === 'beam'
-        ? Math.abs(projectile.position.x - player.position.x) <= projectile.radius + player.hitboxRadius
-          && player.position.y <= projectile.position.y + projectile.beamLength * 0.5
-          && player.position.y >= projectile.position.y - projectile.beamLength * 0.5
-        : circleHit(projectile.position.x, projectile.position.y, projectile.radius, player.position.x, player.position.y, player.radius)
-
-      if (!hit) continue
       if (projectile.type === 'missile') {
-        this.explodeEnemyProjectile(projectile, events, true)
+        const directHit = this.findFirstHitPlayer(projectile)
+        if (!directHit) continue
+        this.explodeEnemyProjectile(projectile, events, directHit.getState().id)
       } else {
-        this.enemyBullets.despawn(projectile)
-        const died = this.player.applyDamage(projectile.damage)
-        this.vfx.screenShake(died ? 0.8 : 0.25, died ? 0.4 : 0.12)
-        if (died) this.audio.explosion(true)
-        else this.audio.shieldHit()
-        if (died) {
-          this.vfx.explosion(player.position.x, player.position.y, '#7acbff', 1.6)
-          this.background.flashBackground('#ff4444', 0.25)
-          events.push({ type: 'player_down', playerId: player.id })
+        if (projectile.type === 'beam') {
+          const hitPlayers = this.findBeamHitPlayers(projectile)
+          if (hitPlayers.length === 0) continue
+          this.enemyBullets.despawn(projectile)
+          for (const hitPlayer of hitPlayers) {
+            this.damagePlayer(hitPlayer, projectile.damage, events)
+          }
+          continue
         }
+
+        const hitPlayer = this.findFirstHitPlayer(projectile)
+        if (!hitPlayer) continue
+        this.enemyBullets.despawn(projectile)
+        this.damagePlayer(hitPlayer, projectile.damage, events)
       }
     }
   }
@@ -799,7 +865,7 @@ export class Arena {
         if (!target.entity.alive || target.entity.id === options?.excludeEntityId) continue
         if (!circleHit(projectile.position.x, projectile.position.y, splashRadius, target.entity.position.x, target.entity.position.y, target.entity.radius)) continue
         if (!countedHit) {
-          this.player.recordHit()
+          this.recordPlayerProjectileHit(projectile)
           recordShotHit(this.scoreState)
           countedHit = true
         }
@@ -811,7 +877,7 @@ export class Arena {
         const boss = this.boss.getState()
         if (circleHit(projectile.position.x, projectile.position.y, splashRadius, boss.position.x, boss.position.y, boss.radius)) {
           if (!countedHit) {
-            this.player.recordHit()
+            this.recordPlayerProjectileHit(projectile)
             recordShotHit(this.scoreState)
           }
           this.boss.hit(this.applyDamageMods(projectile.damage * 0.6, true))
@@ -823,105 +889,105 @@ export class Arena {
     this.vfx.explosion(projectile.position.x, projectile.position.y, this.projectileExplosionColor(projectile), 0.7 + splashRadius * 0.28)
   }
 
-  private explodeEnemyProjectile(projectile: ProjectileEntity, events: ArcadeEvent[], forceHitPlayer = false): void {
-    const player = this.player.getState()
+  private explodeEnemyProjectile(projectile: ProjectileEntity, events: ArcadeEvent[], forceHitPlayerId?: string): void {
     const splashRadius = Math.max(projectile.splashRadius, projectile.proximityRadius, projectile.radius)
-    const hitPlayer = forceHitPlayer
-      || circleHit(projectile.position.x, projectile.position.y, splashRadius, player.position.x, player.position.y, player.radius)
 
     this.enemyBullets.despawn(projectile)
     this.vfx.explosion(projectile.position.x, projectile.position.y, this.projectileExplosionColor(projectile), 0.58 + splashRadius * 0.22)
 
-    if (!hitPlayer) return
-
-    const died = this.player.applyDamage(projectile.damage)
-    this.vfx.screenShake(died ? 0.8 : 0.25, died ? 0.4 : 0.12)
-    if (died) this.audio.explosion(true)
-    else this.audio.shieldHit()
-    if (died) {
-      this.vfx.explosion(player.position.x, player.position.y, '#7acbff', 1.6)
-      this.background.flashBackground('#ff4444', 0.25)
-      events.push({ type: 'player_down', playerId: player.id })
-    }
+    this.damagePlayersInRadius(projectile.position, splashRadius, projectile.damage, events, forceHitPlayerId)
   }
 
   private handleBodyCollisions(events: ArcadeEvent[]): void {
-    const player = this.player.getState()
-    for (const enemy of this._cachedEnemies) {
-      if (!circleHit(player.position.x, player.position.y, player.radius, enemy.position.x, enemy.position.y, enemy.radius)) continue
-      const died = this.player.applyDamage(enemy.def.collisionDamage ?? 6)
-      const result = this.enemies.hit(enemy, 999)
-      this.handleKillResult(result, 'enemy', events)
-      if (died) { this.background.flashBackground('#ff4444', 0.25); events.push({ type: 'player_down', playerId: player.id }) }
-    }
-    for (const meteor of this._cachedMeteors) {
-      if (!circleHit(player.position.x, player.position.y, player.radius, meteor.position.x, meteor.position.y, meteor.radius)) continue
-      const died = this.player.applyDamage(8)
-      const result = this.meteors.hit(meteor, 999)
-      this.handleKillResult(result, 'meteor', events)
-      if (died) { this.background.flashBackground('#ff4444', 0.25); events.push({ type: 'player_down', playerId: player.id }) }
+    for (const player of this.players) {
+      const state = player.getState()
+      if (!state.alive) continue
+      for (const enemy of this._cachedEnemies) {
+        if (!enemy.alive) continue
+        if (!circleHit(state.position.x, state.position.y, state.radius, enemy.position.x, enemy.position.y, enemy.radius)) continue
+        this.damagePlayer(player, enemy.def.collisionDamage ?? 6, events)
+        const result = this.enemies.hit(enemy, 999)
+        this.handleKillResult(result, 'enemy', events)
+        if (!state.alive) break
+      }
+      if (!state.alive) continue
+      for (const meteor of this._cachedMeteors) {
+        if (!meteor.alive) continue
+        if (!circleHit(state.position.x, state.position.y, state.radius, meteor.position.x, meteor.position.y, meteor.radius)) continue
+        this.damagePlayer(player, 8, events)
+        const result = this.meteors.hit(meteor, 999)
+        this.handleKillResult(result, 'meteor', events)
+        if (!state.alive) break
+      }
     }
   }
 
   private handlePickups(events: ArcadeEvent[]): void {
-    const player = this.player.getState()
-    const collected = this.pickups.collect(player.position, PLAYER_CONST.PICKUP_RADIUS)
-    for (const pickup of collected) {
-      this.audio.pickup()
-      const isNewDataLog = pickup.type !== 'data_cube'
-        || !pickup.payload
-        || !this.collectedLogs.includes(pickup.payload)
+    for (const player of this.players) {
+      const state = player.getState()
+      if (!state.alive) continue
+      const collected = this.pickups.collect(state.position, PLAYER_CONST.PICKUP_RADIUS)
+      for (const pickup of collected) {
+        this.audio.pickup()
+        const isNewDataLog = pickup.type !== 'data_cube'
+          || !pickup.payload
+          || !this.collectedLogs.includes(pickup.payload)
 
-      if (pickup.type === 'data_cube' && pickup.payload && isNewDataLog) {
-        this.collectedLogs.push(pickup.payload)
-      }
+        if (pickup.type === 'data_cube' && pickup.payload && isNewDataLog) {
+          this.collectedLogs.push(pickup.payload)
+        }
 
-      if (pickup.type !== 'data_cube' || isNewDataLog) {
-        const effect = applyPickupEffect(pickup, {
-          player: this.player,
-          scoreState: this.scoreState,
-          powerups: this.powerups,
-          scorePopup: (x, y, text, color) => this.vfx.scorePopup(x, y, text, color),
+        if (pickup.type !== 'data_cube' || isNewDataLog) {
+          const effect = applyPickupEffect(pickup, {
+            player,
+            scoreState: this.scoreState,
+            powerups: this.powerups,
+            scorePopup: (x, y, text, color) => this.vfx.scorePopup(x, y, text, color),
+          })
+          if (effect.latestComms) {
+            this.latestComms = effect.latestComms
+          }
+          if (effect.event) {
+            events.push(effect.event)
+          }
+        }
+
+        const secret = resolveSecretFromPickup({
+          trigger: this.level.secretTrigger,
+          type: pickup.type,
+          payload: pickup.payload,
+          value: pickup.value,
+          rearWeaponId: state.loadout.weapons.rear,
+          progress: this.secretProgress,
+          discoveredSecrets: this.discoveredSecrets,
         })
-        if (effect.latestComms) {
-          this.latestComms = effect.latestComms
+        this.secretProgress = secret.nextProgress
+        if (secret.message) {
+          this.latestComms = [secret.message]
         }
-        if (effect.event) {
-          events.push(effect.event)
+        if (secret.revealSecretId) {
+          this.revealSecretLevel(secret.revealSecretId, events)
         }
-      }
 
-      const secret = resolveSecretFromPickup({
-        trigger: this.level.secretTrigger,
-        type: pickup.type,
-        payload: pickup.payload,
-        value: pickup.value,
-        rearWeaponId: this.player.getState().loadout.weapons.rear,
-        progress: this.secretProgress,
-        discoveredSecrets: this.discoveredSecrets,
-      })
-      this.secretProgress = secret.nextProgress
-      if (secret.message) {
-        this.latestComms = [secret.message]
+        events.push({ type: 'pickup_collected', pickupType: pickup.type, value: pickup.value })
       }
-      if (secret.revealSecretId) {
-        this.revealSecretLevel(secret.revealSecretId, events)
-      }
-
-      events.push({ type: 'pickup_collected', pickupType: pickup.type, value: pickup.value })
     }
   }
 
   private handleGrazing(projectiles: ProjectileEntity[]): void {
-    const player = this.player.getState()
-    for (const projectile of projectiles) {
-      if (!projectile.alive || projectile.type === 'field') continue
-      const distance = Math.hypot(projectile.position.x - player.position.x, projectile.position.y - player.position.y)
-      if (distance <= PLAYER_CONST.GRAZE_RADIUS && distance > player.hitboxRadius + projectile.radius && !this.grazeSet.has(projectile.id)) {
-        this.grazeSet.add(projectile.id)
-        registerGraze(this.scoreState)
-        this.vfx.scorePopup(player.position.x, player.position.y + 1, '+10', '#91f0ff')
-        this.audio.graze()
+    for (const player of this.players) {
+      const state = player.getState()
+      if (!state.alive) continue
+      for (const projectile of projectiles) {
+        if (!projectile.alive || projectile.type === 'field') continue
+        const grazeId = `${state.id}:${projectile.id}`
+        const distance = Math.hypot(projectile.position.x - state.position.x, projectile.position.y - state.position.y)
+        if (distance <= PLAYER_CONST.GRAZE_RADIUS && distance > state.hitboxRadius + projectile.radius && !this.grazeSet.has(grazeId)) {
+          this.grazeSet.add(grazeId)
+          registerGraze(this.scoreState)
+          this.vfx.scorePopup(state.position.x, state.position.y + 1, '+10', '#91f0ff')
+          this.audio.graze()
+        }
       }
     }
   }
@@ -933,7 +999,6 @@ export class Arena {
       const creditBonus = 1 + this.modifiers.creditGain
       registerKill(this.scoreState, result.score, Math.round(result.credits * creditBonus))
       if (weaponId) registerWeaponKill(this.scoreState, weaponId)
-      this.player.addScore(result.score)
       this.vfx.scorePopup(result.position.x, result.position.y + 0.5, `+${result.score}`)
     } else {
       this.scoreState.score += result.score
@@ -971,7 +1036,7 @@ export class Arena {
 
   private maybeDropPowerUp(position: Vec2): void {
     if (Math.random() >= POWERUP_DROP_CHANCE) return
-    const drop = this.powerups.roll(this.player.getState().loadout)
+    const drop = this.powerups.roll(this.players[0].getState().loadout)
     if (!drop) return
     this.pickups.spawn('powerup', position, String(drop.dropId), 1, drop.sprite)
   }
@@ -988,10 +1053,129 @@ export class Arena {
     }
   }
 
-  private currentPickupMagnetRadius(): number {
-    const orbitals = this._cachedPlayerProjectiles.filter((projectile) => projectile.weaponId === 'attractor_field')
-    if (orbitals.length === 0) return 0
-    return Math.max(...orbitals.map((projectile) => projectile.orbitRadius || 4))
+  private getPickupMagnets(): Array<{ point: Vec2; radius: number }> {
+    const magnets = new Map<string, number>()
+    for (const projectile of this._cachedPlayerProjectiles) {
+      if (!projectile.alive || projectile.weaponId !== 'attractor_field' || !projectile.anchorId) continue
+      magnets.set(
+        projectile.anchorId,
+        Math.max(magnets.get(projectile.anchorId) ?? 0, projectile.orbitRadius || 4),
+      )
+    }
+
+    return this.players.flatMap((player) => {
+      const state = player.getState()
+      const radius = magnets.get(state.id) ?? 0
+      if (!state.alive || radius <= 0) return []
+      return [{ point: { ...state.position }, radius }]
+    })
+  }
+
+  private getPowerUpOwners(): PowerUpOwner[] {
+    return this.players.map((player) => {
+      const playerState = player.getState()
+      return {
+        playerId: playerState.id,
+        loadout: playerState.loadout,
+        playerState,
+      }
+    })
+  }
+
+  private getPlayerById(playerId: string): PlayerController | null {
+    return this.players.find((player) => player.getState().id === playerId) ?? null
+  }
+
+  private recordPlayerProjectileHit(projectile: ProjectileEntity): void {
+    const owner = projectile.anchorId
+      ? this.getPlayerById(projectile.anchorId)
+      : this.findNearestPlayerController(projectile.position)
+    owner?.recordHit()
+  }
+
+  private findNearestPlayerController(position: Vec2): PlayerController | null {
+    let best: PlayerController | null = null
+    let bestDistance = Number.POSITIVE_INFINITY
+
+    for (const player of this.players) {
+      const state = player.getState()
+      const distance = (state.position.x - position.x) ** 2 + (state.position.y - position.y) ** 2
+      if (distance < bestDistance) {
+        best = player
+        bestDistance = distance
+      }
+    }
+
+    return best
+  }
+
+  private trackShieldBreaks(): void {
+    for (const player of this.players) {
+      const state = player.getState()
+      if (state.maxShield <= 0 || state.shield > 0) {
+        this.shieldBreakPlayed.delete(state.id)
+        continue
+      }
+      if (this.shieldBreakPlayed.has(state.id)) continue
+      this.shieldBreakPlayed.add(state.id)
+      this.audio.shieldBreak()
+    }
+  }
+
+  private findBeamHitPlayers(projectile: ProjectileEntity): PlayerController[] {
+    return this.players.filter((player) => {
+      const state = player.getState()
+      return state.alive
+        && Math.abs(projectile.position.x - state.position.x) <= projectile.radius + state.hitboxRadius
+        && state.position.y <= projectile.position.y + projectile.beamLength * 0.5
+        && state.position.y >= projectile.position.y - projectile.beamLength * 0.5
+    })
+  }
+
+  private findFirstHitPlayer(projectile: ProjectileEntity): PlayerController | null {
+    const alivePlayers = this.players.filter((player) => player.getState().alive)
+    for (const player of alivePlayers) {
+      const state = player.getState()
+      if (circleHit(projectile.position.x, projectile.position.y, projectile.radius, state.position.x, state.position.y, state.radius)) {
+        return player
+      }
+    }
+    return null
+  }
+
+  private damagePlayer(player: PlayerController, amount: number, events: ArcadeEvent[]): boolean {
+    const state = player.getState()
+    const died = player.applyDamage(amount)
+    this.vfx.screenShake(died ? 0.8 : 0.25, died ? 0.4 : 0.12)
+    if (died) {
+      this.audio.explosion(true)
+      this.vfx.explosion(state.position.x, state.position.y, '#7acbff', 1.6)
+      this.background.flashBackground('#ff4444', 0.25)
+      events.push({ type: 'player_down', playerId: state.id })
+    } else {
+      this.audio.shieldHit()
+    }
+    return died
+  }
+
+  private damagePlayersInRadius(
+    position: Vec2,
+    radius: number,
+    damage: number,
+    events: ArcadeEvent[],
+    forceHitPlayerId?: string,
+  ): boolean {
+    let hitPlayer = false
+    for (const player of this.players) {
+      const state = player.getState()
+      if (!state.alive) continue
+      const shouldHit = forceHitPlayerId === state.id
+        || circleHit(position.x, position.y, radius, state.position.x, state.position.y, state.radius)
+      if (!shouldHit) continue
+      hitPlayer = true
+      this.damagePlayer(player, damage, events)
+    }
+    return hitPlayer
   }
 
   private findNearestEnemy(position: Vec2): Vec2 | null {
@@ -1020,8 +1204,11 @@ export class Arena {
   }
 
   private resolveAnchor(anchorId: string): Vec2 | null {
-    if (anchorId === this.player.getState().id) {
-      return this.player.getState().position
+    for (const player of this.players) {
+      const state = player.getState()
+      if (anchorId === state.id) {
+        return state.position
+      }
     }
     return null
   }
@@ -1065,12 +1252,12 @@ export class Arena {
     }
   }
 
-  private handleBomb(events: ArcadeEvent[]): void {
-    const player = this.player.getState()
-    const bombsRemaining = player.loadout.specialAmmo.mega_bomb ?? 0
+  private handleBomb(player: PlayerController, events: ArcadeEvent[]): void {
+    const state = player.getState()
+    const bombsRemaining = state.loadout.specialAmmo.mega_bomb ?? 0
     if (bombsRemaining <= 0) return
-    player.loadout.specialAmmo.mega_bomb = bombsRemaining - 1
-    player.bombs = bombsRemaining - 1
+    state.loadout.specialAmmo.mega_bomb = bombsRemaining - 1
+    state.bombs = bombsRemaining - 1
     this.enemyBullets.clear()
     const managers = [
       { mgr: this.enemies, kind: 'enemy' as DamageableKind },
@@ -1078,14 +1265,14 @@ export class Arena {
       { mgr: this.terrain, kind: 'terrain' as DamageableKind },
     ]
     for (const { mgr, kind } of managers) {
-      for (const result of mgr.damageAt(player.position.x, player.position.y, PLAYER_CONST.BOMB_RADIUS, PLAYER_CONST.BOMB_DAMAGE)) {
+      for (const result of mgr.damageAt(state.position.x, state.position.y, PLAYER_CONST.BOMB_RADIUS, PLAYER_CONST.BOMB_DAMAGE)) {
         this.handleKillResult(result, kind, events)
       }
     }
     if (this.boss && !this.boss.isDefeated()) {
       this.boss.hit(PLAYER_CONST.BOMB_DAMAGE)
     }
-    this.vfx.explosion(player.position.x, player.position.y, '#9fd6ff', 2)
+    this.vfx.explosion(state.position.x, state.position.y, '#9fd6ff', 2)
     this.vfx.screenShake(1, 0.45)
     this.background.flashBackground('#ffffff', 0.4)
     this.audio.explosion(true)
@@ -1113,7 +1300,7 @@ export class Arena {
 
   private finish(events: ArcadeEvent[]): void {
     if (this.result.ended) return
-    this.powerups.clear(this.player.getState().loadout, this.player.getState())
+    this.powerups.clear(this.getPowerUpOwners())
     const finalized = finalizeCombatResult(this.result.success, this.level, this.elapsed, this.scoreState)
     this.result.ended = finalized.result.ended
     this.result.debrief = finalized.debrief

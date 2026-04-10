@@ -113,11 +113,14 @@ export class ArcadeMode {
       for (const event of events) this.handleCombatEvent(event)
 
       const snapshot = this.arena.getSnapshot()
+      const anyPilotInDanger = snapshot.players.some((player) =>
+        player.alive && player.health < player.maxHealth * 0.35,
+      )
       this.state = buildCombatState(this.state, snapshot, this.campaign?.score ?? 0)
       this.music.setCue(
         snapshot.boss
           ? 'arcade_boss'
-          : snapshot.player.health < snapshot.player.maxHealth * 0.35
+          : anyPilotInDanger
             ? 'arcade_danger'
             : 'arcade_action',
       )

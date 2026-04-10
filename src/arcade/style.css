@@ -942,6 +942,47 @@
   padding: 0.8rem;
 }
 
+.arc-team-status {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.arc-player-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem;
+  border-radius: var(--arc-radius);
+  background: var(--arc-surface);
+  border: 1px solid rgba(34, 209, 238, 0.12);
+}
+
+.arc-player-card.down {
+  opacity: 0.72;
+}
+
+.arc-player-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.arc-player-label,
+.arc-player-state {
+  font-family: 'Saira Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.arc-player-label {
+  color: var(--arc-cyan);
+}
+
+.arc-player-state {
+  color: var(--arc-muted);
+}
+
 .arc-combat-right {
   top: 4.8rem;
   right: 0.6rem;

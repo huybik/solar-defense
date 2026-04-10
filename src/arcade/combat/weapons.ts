@@ -381,7 +381,7 @@ export class WeaponController {
         scale: level.scale * 1.8,
         tint: def.id === 'sandstorm' ? '#d2a463' : def.id === 'repulsor' ? '#9de0ff' : '#8cf5ff',
         slowFactor: def.id === 'ice_beam' ? 0.5 : def.id === 'sandstorm' ? 0.75 : 0,
-        anchorId: def.id === 'repulsor' ? context.anchorId : undefined,
+        anchorId: context.anchorId,
         decoy: false,
       })
       return { shotsFired: 1, usedSpecial: true, usedBomb: false }
@@ -403,6 +403,7 @@ export class WeaponController {
         scale: level.scale * 1.5,
         tint: '#ffb85a',
         splashRadius: level.splashRadius,
+        anchorId: context.anchorId,
         decoy: true,
       })
     }
@@ -454,6 +455,7 @@ export class WeaponController {
         tint: weaponTint(def.id),
         trailColor: def.trailColor,
         slowFactor: def.id === 'ice_beam' ? 0.5 : 0,
+        anchorId: player.id,
       })
       fired += 1
     }
@@ -481,6 +483,7 @@ export class WeaponController {
             homing: frontLevel.homing ?? 0,
             splashRadius: frontLevel.splashRadius,
             tint: '#8ef7ff',
+            anchorId: player.id,
           })
           fired += 1
         }

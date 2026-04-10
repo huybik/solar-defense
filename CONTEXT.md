@@ -78,11 +78,16 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 - `data/`: static definitions — `weapons.ts`, `enemies.ts`, `bosses.ts`, `levels.ts`, `campaign.ts`, `lore.ts`, `difficulty.ts`, `mastery.ts`
 - `combat/`: runtime entities — `arena.ts`, `player.ts`, `bullets.ts`, `weapons.ts`, `enemies.ts`, `boss.ts`, `meteors.ts`, `terrain.ts`, `pickups.ts`, `power-ups.ts`, plus extracted helper modules
 - `combat/bullets.ts`: projectile runtime now keeps reusable mesh pools plus a 3-phase missile model (`launch -> acquire -> terminal`) with smoothed visual rotation, cached lock reacquire, target memory, proximity fuse state, splash metadata, and trail hooks
-- `combat/arena.ts`: combat facade; still owns the live loop/collision flow, but now delegates boss-upgrade math, timeline/scheduled spawns, pickup application, secret rules, and debrief/result finalization to helper modules
+- `combat/arena.ts`: combat facade; still owns the live loop/collision flow, but now delegates boss-upgrade math, timeline/scheduled spawns, pickup application, secret rules, debrief/result finalization, and 2-player co-op runtime coordination (P1 + wingmate)
 - Regular enemies now resolve through planet-specific sprite/tint variant tables, so the authored `EnemyType` archetypes can stay shared while each planet still gets its own visual roster; filler waves also pull from planet-specific enemy pools, and normal-enemy HP now scales with campaign episode + combat wave on top of difficulty
 - `combat/modifiers.ts`, `timeline.ts`, `pickup-effects.ts`, `secret-rules.ts`, `outcome.ts`: extracted arcade combat subsystems; `timeline.ts` now delays boss entry until the authored spawn/hazard script has played out instead of interrupting late segments
 - `progression/`: economy & persistence — `inventory.ts`, `shop.ts`, `scoring.ts`
 - `render/`: presentation — `background.ts`, `sprites.ts`, `vfx.ts`, `audio.ts`, `music.ts`, `hud.ts`
+
+### Co-op combat
+- Combat now spawns two player ships at once; stage failure only happens when both ships are out of lives
+- P1 uses the original keyboard bindings. P2 can use the dedicated keyboard bindings in `src/arcade/combat/player.ts` or the first connected gamepad
+- Combat HUD/state now exposes both pilots, and power-up ownership is tracked per pilot even though campaign progression still persists the main campaign loadout
 
 ### Boss system
 - 8 full bosses (one per planet, level 3 finale): Solar Forge, Acid Empress, Orbital Sentinel, Dust Devil, Storm King, Ring Guardian, Ice Titan, Void Leviathan
@@ -109,7 +114,10 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 `arcade_started`, `wave_start`, `wave_clear`, `boss_enter`, `boss_phase`, `boss_vulnerable`, `boss_defeated`, `player_down`, `pickup_collected`, `terminal_found`, `secret_revealed`, `synergy_discovered`, `stage_clear`, `stage_failed`
 
 ### Controls
-WASD/arrows move, Space fires, Shift focuses, E uses special, F drops MegaBomb, Q cycles specials, Esc pauses.
+Auto-fire is always on.
+P1: WASD or arrows move, E uses special, Q cycles specials, Space/F drops MegaBomb.
+P2: IJKL move, O uses special, U cycles specials, P drops MegaBomb, or use the first connected gamepad.
+Esc pauses.
 
 ## Visual System
 

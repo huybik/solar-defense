@@ -120,26 +120,18 @@ export class ArcadeHUD {
     setTextEl(el('.arc-wave-pill'), state.bossMaxHealth > 0 ? 'BOSS' : `WAVE ${state.wave}/${state.totalWaves}`)
     setTextEl(el('.arc-combo-value'), state.combo > 1 ? `x${state.combo}` : 'x1')
     setTextEl(el('.arc-graze-value'), String(state.grazeCount))
-    setTextEl(el('.arc-special-name'), state.specialName || 'NONE')
     setTextEl(el('.arc-synergy'), state.synergy ? `SYNERGY ${escapeHtml(state.synergy)}` : 'SYNERGY OFFLINE')
     setTextEl(el('.arc-comms-text'), state.comms[0] ?? view.message)
-
-    setBarEl(el('.arc-health-fill'), state.health, state.maxHealth)
-    setBarEl(el('.arc-shield-fill'), state.shield, state.maxShield)
-    setBarEl(el('.arc-energy-fill'), state.energy, state.maxEnergy)
-
-    setTextEl(el('.arc-lives-value'), String(state.lives))
-    setTextEl(el('.arc-bombs-value'), String(state.bombs))
     setTextEl(el('.arc-accuracy-value'), `${Math.round(state.accuracy)}%`)
+
+    const teamEl = el('.arc-team-status')
+    if (teamEl) {
+      teamEl.innerHTML = renderCombatPlayers(state)
+    }
 
     const powerupsEl = el('.arc-powerups')
     if (powerupsEl) {
-      const puHtml = state.powerups.map((pu) => {
-        const pct = Math.max(0, Math.min(100, (pu.remaining / pu.duration) * 100))
-        const secs = Math.ceil(pu.remaining)
-        return `<div class="arc-pu-item"><span class="arc-pu-label">${escapeHtml(pu.label)}<em>${secs}s</em></span><div class="arc-bar arc-pu-bar"><div class="arc-bar-fill arc-pu-fill" style="width:${pct}%"></div></div></div>`
-      }).join('')
-      powerupsEl.innerHTML = puHtml
+      powerupsEl.innerHTML = renderCombatPowerups(state)
     }
 
     const bossWrap = el('.arc-boss')
@@ -197,7 +189,7 @@ export class ArcadeHUD {
           <h2 class="arc-title">Command Center</h2>
           <p class="arc-copy">Eight episodes. Shops between sorties. Secret routes if you know where to look.</p>
           <div class="arc-difficulty-row">${difficultyRow}</div>
-          <p class="arc-controls-note">WASD/Arrows move. Auto-fire. Space drops MegaBomb. Q cycles specials. Esc pauses.</p>
+          <p class="arc-controls-note">P1: WASD or Arrows move, E use special, Q cycle, Space/F MegaBomb. P2: IJKL move, O use special, U cycle, P MegaBomb, or use the first connected gamepad. Esc pauses.</p>
           <div class="arc-slot-grid">${slots}</div>
           <div class="arc-screen-actions">
             <button class="arc-btn arc-btn-secondary" data-action="exit_arcade">EXIT</button>
@@ -332,21 +324,14 @@ export class ArcadeHUD {
           <div class="arc-wave-pill">${state.bossMaxHealth > 0 ? 'BOSS' : `WAVE ${state.wave}/${state.totalWaves}`}</div>
         </div>
         <div class="arc-combat-left">
-          <div class="arc-meter"><span>ARMOR</span><div class="arc-bar"><div class="arc-bar-fill arc-health-fill"></div></div></div>
-          <div class="arc-meter"><span>SHIELD</span><div class="arc-bar"><div class="arc-bar-fill arc-shield-fill"></div></div></div>
-          <div class="arc-meter"><span>ENERGY</span><div class="arc-bar"><div class="arc-bar-fill arc-energy-fill"></div></div></div>
-          <div class="arc-meta-row">Lives <strong class="arc-lives-value">${state.lives}</strong></div>
-          <div class="arc-meta-row">Bombs <strong class="arc-bombs-value">${state.bombs}</strong></div>
+          <div class="arc-team-status">${renderCombatPlayers(state)}</div>
         </div>
         <div class="arc-combat-right">
           <div class="arc-meta-row">Combo <strong class="arc-combo-value">${state.combo > 1 ? `x${state.combo}` : 'x1'}</strong></div>
           <div class="arc-meta-row">Graze <strong class="arc-graze-value">${state.grazeCount}</strong></div>
           <div class="arc-meta-row">Accuracy <strong class="arc-accuracy-value">${Math.round(state.accuracy)}%</strong></div>
-          <div class="arc-special-box">
-            <span class="arc-special-name">${escapeHtml(state.specialName)}</span>
-          </div>
           <div class="arc-synergy">${state.synergy ? `SYNERGY ${escapeHtml(state.synergy)}` : 'SYNERGY OFFLINE'}</div>
-          <div class="arc-powerups"></div>
+          <div class="arc-powerups">${renderCombatPowerups(state)}</div>
         </div>
         <div class="arc-boss"${state.bossMaxHealth > 0 ? '' : ' style="display:none"'}>
           <div class="arc-boss-head">
@@ -505,6 +490,39 @@ function slotForTab(tab: ShopTab): string | null {
     default:
       return null
   }
+}
+
+function renderCombatPlayers(state: ArcadeState): string {
+  return state.players.map((player) => `
+    <section class="arc-player-card${player.alive ? '' : ' down'}">
+      <div class="arc-player-head">
+        <span class="arc-player-label">${escapeHtml(player.label)}</span>
+        <span class="arc-player-state">${player.alive ? 'ONLINE' : player.lives > 0 ? 'RESPAWNING' : 'DOWN'}</span>
+      </div>
+      <div class="arc-meter"><span>Armor</span><div class="arc-bar"><div class="arc-bar-fill arc-health-fill" style="width:${barWidth(player.health, player.maxHealth)}%"></div></div></div>
+      <div class="arc-meter"><span>Shield</span><div class="arc-bar"><div class="arc-bar-fill arc-shield-fill" style="width:${barWidth(player.shield, player.maxShield)}%"></div></div></div>
+      <div class="arc-meter"><span>Energy</span><div class="arc-bar"><div class="arc-bar-fill arc-energy-fill" style="width:${barWidth(player.energy, player.maxEnergy)}%"></div></div></div>
+      <div class="arc-meta-row">Lives <strong>${player.lives}</strong></div>
+      <div class="arc-meta-row">Bombs <strong>${player.bombs}</strong></div>
+      <div class="arc-special-box">
+        <span class="arc-special-name">${escapeHtml(player.specialName || 'NONE')}</span>
+        <strong class="arc-special-ammo">${player.specialAmmo}</strong>
+      </div>
+    </section>
+  `).join('')
+}
+
+function renderCombatPowerups(state: ArcadeState): string {
+  const labels = new Map(state.players.map((player) => [player.id, player.label]))
+  return state.powerups.map((pu) => {
+    const pct = Math.max(0, Math.min(100, (pu.remaining / pu.duration) * 100))
+    const secs = Math.ceil(pu.remaining)
+    return `<div class="arc-pu-item"><span class="arc-pu-label">${escapeHtml(labels.get(pu.playerId) ?? 'P?')} ${escapeHtml(pu.label)}<em>${secs}s</em></span><div class="arc-bar arc-pu-bar"><div class="arc-bar-fill arc-pu-fill" style="width:${pct}%"></div></div></div>`
+  }).join('')
+}
+
+function barWidth(value: number, max: number): number {
+  return max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0
 }
 
 
