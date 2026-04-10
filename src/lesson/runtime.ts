@@ -386,10 +386,9 @@ export class SolarGameRuntime {
 
         // Standalone: cinematic intro → straight to arcade (skip observatory route)
         if (__IS_STANDALONE__) {
-          if (!this.warmupComplete && !sessionStorage.getItem('solar-cinematic-seen')) {
+          if (!this.warmupComplete) {
             await this.playCinematic()
             if (readyToken !== this.onReadyToken) return
-            sessionStorage.setItem('solar-cinematic-seen', '1')
           }
           this.warmupComplete = true
           this.enterArcade()

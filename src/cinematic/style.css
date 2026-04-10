@@ -45,8 +45,9 @@
 
 .cinematic-skip {
   position: absolute;
-  top: 2rem;
-  right: 2rem;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
   pointer-events: auto;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.08);
