@@ -2,6 +2,7 @@ import type { ArcadeState, CampaignState, DataLogEntry } from '../types'
 import type { ShopEntry, ShopTab } from '../progression/shop'
 import { getSpriteCSS } from './sprites'
 import { escapeHtml } from '../../utils'
+import { isTouchDevice } from '../combat/player'
 
 export interface MapLevelView {
   id: string
@@ -134,6 +135,11 @@ export class ArcadeHUD {
       powerupsEl.innerHTML = renderCombatPowerups(state)
     }
 
+    const coopPromptEl = el('.arc-coop-prompt')
+    if (coopPromptEl) {
+      coopPromptEl.style.display = state.coopPromptVisible ? '' : 'none'
+    }
+
     const bossWrap = el('.arc-boss')
     if (bossWrap) {
       bossWrap.style.display = state.bossMaxHealth > 0 ? '' : 'none'
@@ -189,7 +195,10 @@ export class ArcadeHUD {
           <h2 class="arc-title">Command Center</h2>
           <p class="arc-copy">Eight episodes. Shops between sorties. Secret routes if you know where to look.</p>
           <div class="arc-difficulty-row">${difficultyRow}</div>
-          <p class="arc-controls-note">P1: WASD or Arrows move, E use special, Q cycle, Space/F MegaBomb. P2: IJKL move, O use special, U cycle, P MegaBomb, or use the first connected gamepad. Esc pauses.</p>
+          <p class="arc-controls-note">${isTouchDevice()
+            ? 'Drag anywhere to move. Auto-fire is always on. Use the BOMB and SP buttons during combat.'
+            : 'P1: WASD or Arrows move, E use special, Q cycle, Space/F MegaBomb. Press P during combat to bring P2 online. After joining, P2 uses IJKL move, O use special, U cycle, P MegaBomb, or the first connected gamepad. Esc pauses.'
+          }</p>
           <div class="arc-slot-grid">${slots}</div>
           <div class="arc-screen-actions">
             <button class="arc-btn arc-btn-secondary" data-action="exit_arcade">EXIT</button>
@@ -327,6 +336,9 @@ export class ArcadeHUD {
           <div class="arc-team-status">${renderCombatPlayers(state)}</div>
         </div>
         <div class="arc-combat-right">
+          <div class="arc-coop-prompt"${state.coopPromptVisible ? '' : ' style="display:none"'}>
+            Press <strong>[P]</strong> for co-op
+          </div>
           <div class="arc-meta-row">Combo <strong class="arc-combo-value">${state.combo > 1 ? `x${state.combo}` : 'x1'}</strong></div>
           <div class="arc-meta-row">Graze <strong class="arc-graze-value">${state.grazeCount}</strong></div>
           <div class="arc-meta-row">Accuracy <strong class="arc-accuracy-value">${Math.round(state.accuracy)}%</strong></div>

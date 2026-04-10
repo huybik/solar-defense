@@ -56,6 +56,7 @@ export function createDefaultArcadeState(): ArcadeState {
     currentTab: 'front',
     debrief: null,
     powerups: [],
+    coopPromptVisible: false,
   }
 }
 
@@ -127,6 +128,7 @@ export function buildCombatState(
     discoveredSecrets: snapshot.discoveredSecrets,
     comms: snapshot.comms,
     powerups,
+    coopPromptVisible: snapshot.coopPromptVisible,
   }
 }
 

@@ -992,6 +992,32 @@
   padding: 0.8rem;
 }
 
+.arc-coop-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: var(--arc-radius);
+  border: 1px solid rgba(34, 209, 238, 0.22);
+  background: rgba(34, 209, 238, 0.06);
+  color: rgba(200, 225, 255, 0.72);
+  font-family: 'Saira Condensed', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  animation: arc-coop-flash 2.8s ease-in-out infinite;
+}
+
+.arc-coop-prompt strong {
+  font-family: 'Oxanium', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--arc-cyan);
+  text-shadow: 0 0 8px rgba(34, 209, 238, 0.35);
+}
+
 .arc-meter {
   display: grid;
   gap: 0.3rem;
@@ -1370,6 +1396,17 @@
   50% { box-shadow: 0 0 20px rgba(34, 209, 238, 0.3); }
 }
 
+@keyframes arc-coop-flash {
+  0%, 100% {
+    opacity: 0.35;
+    box-shadow: none;
+  }
+  50% {
+    opacity: 0.95;
+    box-shadow: 0 0 14px rgba(34, 209, 238, 0.18);
+  }
+}
+
 @keyframes arc-boss-pulse {
   0%, 100% { border-color: rgba(239, 68, 68, 0.2); }
   50% { border-color: rgba(239, 68, 68, 0.5); }
@@ -1454,5 +1491,129 @@
 
   .arc-screen-inner {
     padding: 1.6rem 1.4rem;
+  }
+}
+
+/* === TOUCH CONTROLS (mobile) === */
+
+.arc-touch-controls {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.arc-touch-btn {
+  position: absolute;
+  pointer-events: auto;
+  border: 2px solid rgba(34, 209, 238, 0.35);
+  border-radius: 50%;
+  background: rgba(4, 10, 24, 0.55);
+  backdrop-filter: blur(6px);
+  color: rgba(230, 240, 255, 0.8);
+  font-family: 'Saira Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.arc-touch-btn:active {
+  background: rgba(34, 209, 238, 0.2);
+  border-color: var(--arc-cyan, #22D1EE);
+}
+
+.arc-touch-bomb {
+  bottom: 2.2rem;
+  right: 1.5rem;
+  width: 4.2rem;
+  height: 4.2rem;
+  border-color: rgba(239, 68, 68, 0.4);
+  color: rgba(239, 68, 68, 0.85);
+  font-size: 0.68rem;
+}
+
+.arc-touch-bomb:active {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.arc-touch-special {
+  bottom: 7.5rem;
+  right: 1.5rem;
+  width: 3.6rem;
+  height: 3.6rem;
+  border-color: rgba(52, 211, 153, 0.4);
+  color: rgba(52, 211, 153, 0.85);
+}
+
+.arc-touch-special:active {
+  background: rgba(52, 211, 153, 0.2);
+  border-color: rgba(52, 211, 153, 0.7);
+}
+
+.arc-touch-pause {
+  top: 0.8rem;
+  right: 0.8rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  font-size: 0.62rem;
+}
+
+/* Portrait-specific combat layout */
+@media (orientation: portrait) and (pointer: coarse) {
+  .arc-combat-shell {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .arc-combat-top {
+    position: static;
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .arc-combat-left,
+  .arc-combat-right {
+    position: static;
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .arc-combat-left {
+    display: none;
+  }
+
+  .arc-combat-right {
+    display: none;
+  }
+
+  .arc-boss {
+    position: static;
+    width: auto;
+    transform: none;
+    flex-shrink: 0;
+  }
+
+  .arc-comms-panel {
+    position: static;
+    width: auto;
+    transform: none;
+    flex-shrink: 0;
+  }
+
+  .arc-comms-panel p {
+    font-size: 0.78rem;
   }
 }

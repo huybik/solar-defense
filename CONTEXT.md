@@ -85,7 +85,8 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 - `render/`: presentation — `background.ts`, `sprites.ts`, `vfx.ts`, `audio.ts`, `music.ts`, `hud.ts`
 
 ### Co-op combat
-- Combat now spawns two player ships at once; stage failure only happens when both ships are out of lives
+- Combat now starts with P1 only; P2 joins mid-fight by pressing `P`, which also reveals a flashing top-right co-op prompt until joined
+- Stage failure still only happens when every active ship is out of lives
 - P1 uses the original keyboard bindings. P2 can use the dedicated keyboard bindings in `src/arcade/combat/player.ts` or the first connected gamepad
 - Combat HUD/state now exposes both pilots, and power-up ownership is tracked per pilot even though campaign progression still persists the main campaign loadout
 
@@ -118,6 +119,9 @@ Auto-fire is always on.
 P1: WASD or arrows move, E uses special, Q cycles specials, Space/F drops MegaBomb.
 P2: IJKL move, O uses special, U cycles specials, P drops MegaBomb, or use the first connected gamepad.
 Esc pauses.
+
+### Mobile / Touch Controls
+On touch-primary devices (`pointer: coarse`), Touhou-style drag-to-move input replaces keyboard for P1. Drag anywhere on screen to move the ship (relative movement, 1:1 mapped to arena units). On-screen BOMB, SP, and pause buttons appear during combat. Portrait orientation widens the camera FOV from 40° to 55° and clamps player movement to the visible area. Touch buttons are DOM overlays managed by `createTouchSource()` in `src/arcade/combat/player.ts`. Browser zoom/pan gestures are suppressed via `touch-action: none` and viewport meta.
 
 ## Visual System
 

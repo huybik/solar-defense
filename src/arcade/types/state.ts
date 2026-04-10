@@ -84,6 +84,7 @@ export interface ArcadeState {
   currentTab: string
   debrief: DebriefData | null
   powerups: Array<{ playerId: string; label: string; remaining: number; duration: number }>
+  coopPromptVisible: boolean
 }
 
 export type ArcadeEvent =

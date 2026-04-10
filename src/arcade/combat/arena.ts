@@ -25,8 +25,10 @@ import { TerrainManager } from './terrain'
 import { VFXManager } from '../render/vfx'
 import {
   PlayerController,
+  createMobileCombatInputHandler,
   createPrimaryCombatInputHandler,
   createSecondaryCombatInputHandler,
+  isTouchDevice,
   type CombatInputHandler,
 } from './player'
 import {
@@ -101,6 +103,7 @@ export interface ArenaSnapshot {
   discoveredSecrets: string[]
   comms: string[]
   powerups: Array<{ playerId: string; label: string; remaining: number; duration: number }>
+  coopPromptVisible: boolean
 }
 
 export class Arena {
@@ -198,6 +201,7 @@ export class Arena {
         JSON.parse(JSON.stringify(campaign.inventory)),
         campaign.weaponMastery ?? {},
         {
+          enabled: false,
           spawnPosition: { x: 7, y: ARENA.PLAYER_MIN_Y + 1.2 },
           hullColor: '#ffe3b0',
           engineColor: '#ffb86c',
@@ -206,10 +210,9 @@ export class Arena {
         },
       ),
     ]
-    this.inputs = [
-      createPrimaryCombatInputHandler(),
-      createSecondaryCombatInputHandler(),
-    ]
+    this.inputs = isTouchDevice()
+      ? [createMobileCombatInputHandler(), createSecondaryCombatInputHandler()]
+      : [createPrimaryCombatInputHandler(), createSecondaryCombatInputHandler()]
     for (const player of this.players) {
       applyFlatBossUpgradeEffects(player.getState(), campaign.bossUpgrades ?? [])
     }
@@ -240,6 +243,26 @@ export class Arena {
     this.elapsed += delta
     const events: ArcadeEvent[] = [...this.result.events]
     this.result.events = []
+    let secondaryJoined = false
+
+    const secondaryPlayer = this.players[1]
+    if (secondaryPlayer && !secondaryPlayer.isActive() && this.clearDelay <= 0 && inputs[1]?.joinPressed) {
+      secondaryPlayer.activate(this.elapsed)
+      this.latestComms = ['CO-OP PILOT ONLINE. PILOT TWO DEPLOYED.']
+      this.audio.ui()
+      secondaryJoined = true
+    }
+
+    const sanitizedInputs = inputs.map((input, index) => {
+      if (!(secondaryJoined && index === 1)) return input
+      return {
+        ...input,
+        specialPressed: false,
+        cycleSpecialPressed: false,
+        bombPressed: false,
+        joinPressed: false,
+      }
+    })
 
     this.cacheDamageableTargets()
 
@@ -256,7 +279,7 @@ export class Arena {
     const activeSynergies: string[] = []
     let usedSpecial = false
     this.players.forEach((player, index) => {
-      const playerUpdate = player.update(inputs[index], {
+      const playerUpdate = player.update(sanitizedInputs[index], {
         delta,
         elapsed: this.elapsed,
         findEnemy: (position) => this.findNearestEnemy(position),
@@ -290,7 +313,7 @@ export class Arena {
     const powerUpOwners = this.getPowerUpOwners()
     this.powerups.update(delta, powerUpOwners)
     for (const player of this.players) {
-      player.setBonusWeapons(this.powerups.getBonusWeapons(player.getState().id))
+      player.setBonusWeapons(player.isActive() ? this.powerups.getBonusWeapons(player.getState().id) : [])
     }
 
     this.updateHazards(delta)
@@ -377,7 +400,9 @@ export class Arena {
   }
 
   getSnapshot(): ArenaSnapshot {
-    const players = this.players.map((player) => player.getState())
+    const players = this.players
+      .filter((player) => player.isActive())
+      .map((player) => player.getState())
     const accuracy = this.scoreState.shotsFired > 0
       ? (this.scoreState.shotsHit / this.scoreState.shotsFired) * 100
       : 100
@@ -405,6 +430,13 @@ export class Arena {
         remaining: pu.remaining,
         duration: pu.duration,
       })),
+      coopPromptVisible: !this.players[1]?.isActive() && this.clearDelay <= 0,
+    }
+  }
+
+  setViewportBounds(visibleHalfWidth: number): void {
+    for (const player of this.players) {
+      player.setMoveBounds(visibleHalfWidth)
     }
   }
 
@@ -1072,13 +1104,14 @@ export class Arena {
   }
 
   private getPowerUpOwners(): PowerUpOwner[] {
-    return this.players.map((player) => {
+    return this.players.flatMap((player) => {
+      if (!player.isActive()) return []
       const playerState = player.getState()
-      return {
+      return [{
         playerId: playerState.id,
         loadout: playerState.loadout,
         playerState,
-      }
+      }]
     })
   }
 
@@ -1098,6 +1131,7 @@ export class Arena {
     let bestDistance = Number.POSITIVE_INFINITY
 
     for (const player of this.players) {
+      if (!player.isActive()) continue
       const state = player.getState()
       const distance = (state.position.x - position.x) ** 2 + (state.position.y - position.y) ** 2
       if (distance < bestDistance) {
@@ -1112,6 +1146,10 @@ export class Arena {
   private trackShieldBreaks(): void {
     for (const player of this.players) {
       const state = player.getState()
+      if (!player.isActive()) {
+        this.shieldBreakPlayed.delete(state.id)
+        continue
+      }
       if (state.maxShield <= 0 || state.shield > 0) {
         this.shieldBreakPlayed.delete(state.id)
         continue

@@ -18,7 +18,7 @@ import { WeaponController, type BonusWeapon, type WeaponInput, type WeaponUpdate
 import { getWeaponDef } from '../data/weapons'
 
 export interface CombatKeys {
-  [key: string]: boolean
+  [key: string]: boolean | number
   up: boolean
   down: boolean
   left: boolean
@@ -28,6 +28,8 @@ export interface CombatKeys {
   cycleSpecial: boolean
   bomb: boolean
   pause: boolean
+  touchDx: number
+  touchDy: number
 }
 
 export interface CombatInputEdges extends CombatKeys {
@@ -36,6 +38,7 @@ export interface CombatInputEdges extends CombatKeys {
   cycleSpecialPressed: boolean
   bombPressed: boolean
   pausePressed: boolean
+  joinPressed: boolean
 }
 
 export interface CombatInputHandler {
@@ -67,6 +70,7 @@ export interface PlayerControllerOptions {
   engineColor?: string
   shieldColor?: string
   hitboxColor?: string
+  enabled?: boolean
 }
 
 export interface PlayerUpdateContext {
@@ -99,6 +103,8 @@ export class PlayerController {
   private lastShieldId: string | null = null
   private readonly weapons: WeaponController
   private elapsed = 0
+  private active = true
+  private halfWBound = ARENA.HALF_W - 0.4
 
   private readonly state: PlayerState
 
@@ -114,6 +120,7 @@ export class PlayerController {
     const resolvedLoadout = loadout ?? createDefaultLoadout()
     const stats = buildLoadoutStats(resolvedLoadout)
     this.spawnPosition = options.spawnPosition ?? { x: 0, y: ARENA.PLAYER_MIN_Y }
+    this.active = options.enabled ?? true
 
     this.hullSprite = loadSprite(stats.hull.sprite, 2, 1.6, {
       color: options.hullColor,
@@ -147,6 +154,7 @@ export class PlayerController {
 
     const start = { ...this.spawnPosition }
     this.group.position.set(start.x, start.y, 0)
+    this.group.visible = this.active
     parent.add(this.group)
 
     this.state = {
@@ -156,13 +164,13 @@ export class PlayerController {
       radius: PLAYER_CONST.BASE_RADIUS,
       hitboxRadius: PLAYER_CONST.HITBOX_RADIUS,
       maxHealth: stats.maxHealth,
-      health: stats.maxHealth,
+      health: this.active ? stats.maxHealth : 0,
       maxShield: stats.maxShield,
-      shield: stats.maxShield,
+      shield: this.active ? stats.maxShield : 0,
       shieldRegenRate: stats.shieldRegenRate,
       shieldRegenTimer: 0,
       maxEnergy: stats.maxEnergy,
-      energy: stats.maxEnergy,
+      energy: this.active ? stats.maxEnergy : 0,
       energyRegen: stats.energyRegen,
       credits: 0,
       score: 0,
@@ -171,11 +179,11 @@ export class PlayerController {
       grazeCount: 0,
       shotsFired: 0,
       shotsHit: 0,
-      bombs: resolvedLoadout.specialAmmo.mega_bomb ?? PLAYER_CONST.STARTING_BOMBS,
-      lives: PLAYER_CONST.STARTING_LIVES,
+      bombs: this.active ? (resolvedLoadout.specialAmmo.mega_bomb ?? PLAYER_CONST.STARTING_BOMBS) : 0,
+      lives: this.active ? PLAYER_CONST.STARTING_LIVES : 0,
       invincibleUntil: 0,
       recoil: 0,
-      alive: true,
+      alive: this.active,
       respawnQueued: false,
       loadout: resolvedLoadout,
       weapons: [],
@@ -185,6 +193,19 @@ export class PlayerController {
 
   update(input: CombatInputEdges, context: PlayerUpdateContext): PlayerUpdateResult {
     this.elapsed = context.elapsed
+
+    if (!this.active) {
+      return {
+        shotsFired: 0,
+        usedBomb: false,
+        usedSpecial: false,
+        synergy: null,
+        discoveredSynergy: null,
+        downed: false,
+        respawned: false,
+      }
+    }
+
     const beforeAlive = this.state.alive
 
     if (this.state.alive) {
@@ -233,6 +254,37 @@ export class PlayerController {
     return this.state
   }
 
+  isActive(): boolean {
+    return this.active
+  }
+
+  activate(elapsed = this.elapsed): void {
+    if (this.active) return
+
+    const stats = buildLoadoutStats(this.state.loadout)
+    this.active = true
+    this.elapsed = elapsed
+    this.state.maxHealth = stats.maxHealth
+    this.state.health = stats.maxHealth
+    this.state.maxShield = stats.maxShield
+    this.state.shield = stats.maxShield
+    this.state.shieldRegenRate = stats.shieldRegenRate
+    this.state.shieldRegenTimer = 0
+    this.state.maxEnergy = stats.maxEnergy
+    this.state.energy = stats.maxEnergy
+    this.state.energyRegen = stats.energyRegen
+    this.state.bombs = this.state.loadout.specialAmmo.mega_bomb ?? PLAYER_CONST.STARTING_BOMBS
+    this.state.lives = PLAYER_CONST.STARTING_LIVES
+    this.state.velocity = { x: 0, y: 0 }
+    this.state.invincibleUntil = this.elapsed + PLAYER_CONST.RESPAWN_INVULNERABLE
+    this.state.recoil = 0
+    this.state.alive = true
+    this.state.respawnQueued = false
+    this.state.position = { ...this.spawnPosition }
+    this.group.position.set(this.spawnPosition.x, this.spawnPosition.y, 0)
+    this.group.visible = true
+  }
+
   getAnchorPositions(): Array<[string, Vec2]> {
     return [[this.state.id, { ...this.state.position }]]
   }
@@ -264,7 +316,7 @@ export class PlayerController {
 
   nudge(dx: number, dy: number): void {
     if (!this.state.alive) return
-    this.state.position.x = clamp(this.state.position.x + dx, -ARENA.HALF_W + 0.4, ARENA.HALF_W - 0.4)
+    this.state.position.x = clamp(this.state.position.x + dx, -this.halfWBound, this.halfWBound)
     this.state.position.y = clamp(this.state.position.y + dy, ARENA.PLAYER_MIN_Y, ARENA.PLAYER_MAX_Y)
     this.group.position.set(this.state.position.x, this.state.position.y - this.state.recoil * 0.08, 0)
   }
@@ -274,7 +326,7 @@ export class PlayerController {
   }
 
   applyDamage(amount: number): boolean {
-    if (!this.state.alive) return false
+    if (!this.active || !this.state.alive) return false
     if (this.elapsed < this.state.invincibleUntil) return false
 
     this.state.shieldRegenTimer = PLAYER_CONST.SHIELD_REGEN_DELAY
@@ -314,27 +366,44 @@ export class PlayerController {
     this.group.removeFromParent()
   }
 
+  setMoveBounds(halfW: number): void {
+    this.halfWBound = Math.min(ARENA.HALF_W - 0.4, halfW - 1)
+  }
+
   private move(input: CombatInputEdges, delta: number): void {
-    const stats = buildLoadoutStats(this.state.loadout)
-    const speed = stats.speed
-    let dx = 0
-    let dy = 0
+    const hasTouchInput = input.touchDx !== 0 || input.touchDy !== 0
 
-    if (input.left) dx -= 1
-    if (input.right) dx += 1
-    if (input.up) dy += 1
-    if (input.down) dy -= 1
+    if (hasTouchInput) {
+      // Touhou-style: drag to move, direct position delta
+      this.state.position.x += input.touchDx
+      this.state.position.y += input.touchDy
+      this.state.velocity.x = input.touchDx / Math.max(delta, 0.001)
+      this.state.velocity.y = input.touchDy / Math.max(delta, 0.001)
+    } else {
+      const stats = buildLoadoutStats(this.state.loadout)
+      const speed = stats.speed
+      let dx = 0
+      let dy = 0
 
-    if (dx !== 0 && dy !== 0) {
-      const inv = 1 / Math.sqrt(2)
-      dx *= inv
-      dy *= inv
+      if (input.left) dx -= 1
+      if (input.right) dx += 1
+      if (input.up) dy += 1
+      if (input.down) dy -= 1
+
+      if (dx !== 0 && dy !== 0) {
+        const inv = 1 / Math.sqrt(2)
+        dx *= inv
+        dy *= inv
+      }
+
+      this.state.velocity.x = dx * speed
+      this.state.velocity.y = dy * speed
+      this.state.position.x += this.state.velocity.x * delta
+      this.state.position.y += this.state.velocity.y * delta
     }
 
-    this.state.velocity.x = dx * speed
-    this.state.velocity.y = dy * speed
-    this.state.position.x = clamp(this.state.position.x + this.state.velocity.x * delta, -ARENA.HALF_W + 0.4, ARENA.HALF_W - 0.4)
-    this.state.position.y = clamp(this.state.position.y + this.state.velocity.y * delta, ARENA.PLAYER_MIN_Y, ARENA.PLAYER_MAX_Y)
+    this.state.position.x = clamp(this.state.position.x, -this.halfWBound, this.halfWBound)
+    this.state.position.y = clamp(this.state.position.y, ARENA.PLAYER_MIN_Y, ARENA.PLAYER_MAX_Y)
     this.group.position.set(this.state.position.x, this.state.position.y, 0)
     this.state.recoil = Math.max(0, this.state.recoil - delta * 5)
     this.group.position.y -= this.state.recoil * 0.08
@@ -541,6 +610,8 @@ function createEmptyKeys(): CombatKeys {
     cycleSpecial: false,
     bomb: false,
     pause: false,
+    touchDx: 0,
+    touchDy: 0,
   }
 }
 
@@ -630,7 +701,10 @@ function createGamepadSource(options: { preferredIndex?: number | null; fallback
   }
 }
 
-function createCombatInputHandler(sources: CombatInputSource[]): CombatInputHandler {
+function createCombatInputHandler(
+  sources: CombatInputSource[],
+  options: { joinUsesBomb?: boolean } = {},
+): CombatInputHandler {
   const previous = createEmptyKeys()
 
   const readMergedKeys = (): CombatKeys => {
@@ -646,6 +720,8 @@ function createCombatInputHandler(sources: CombatInputSource[]): CombatInputHand
       next.cycleSpecial ||= keys.cycleSpecial
       next.bomb ||= keys.bomb
       next.pause ||= keys.pause
+      next.touchDx += keys.touchDx
+      next.touchDy += keys.touchDy
     }
     return next
   }
@@ -653,14 +729,16 @@ function createCombatInputHandler(sources: CombatInputSource[]): CombatInputHand
   return {
     poll() {
       const keys = readMergedKeys()
+      const bombPressed = !previous.bomb && keys.bomb
       const result: CombatInputEdges = {
         ...keys,
         fire: true,
         fireReleased: previous.fire && !keys.fire,
         specialPressed: !previous.special && keys.special,
         cycleSpecialPressed: !previous.cycleSpecial && keys.cycleSpecial,
-        bombPressed: !previous.bomb && keys.bomb,
+        bombPressed,
         pausePressed: !previous.pause && keys.pause,
+        joinPressed: Boolean(options.joinUsesBomb && bombPressed),
       }
       Object.assign(previous, keys)
       return result
@@ -685,9 +763,130 @@ export function createSecondaryCombatInputHandler(): CombatInputHandler {
   return createCombatInputHandler([
     createKeyboardSource(SECONDARY_KEY_BINDINGS),
     createGamepadSource({ fallbackToFirstConnected: true }),
-  ])
+  ], { joinUsesBomb: true })
 }
 
 export function createCombatKeyboardHandler(): CombatInputHandler {
   return createPrimaryCombatInputHandler()
+}
+
+export function isTouchDevice(): boolean {
+  return 'ontouchstart' in window && window.matchMedia('(pointer: coarse)').matches
+}
+
+function createTouchSource(): CombatInputSource {
+  let lastX = 0
+  let lastY = 0
+  let dx = 0
+  let dy = 0
+  let tracking = false
+  let trackingId: number | null = null
+  let bombFlag = false
+  let specialFlag = false
+  let pauseFlag = false
+  let buttonContainer: HTMLDivElement | null = null
+
+  const isButton = (e: TouchEvent) => (e.target as HTMLElement).closest('.arc-touch-btn, [data-action]')
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (isButton(e)) return
+    if (!tracking) {
+      const touch = e.changedTouches[0]
+      trackingId = touch.identifier
+      lastX = touch.clientX
+      lastY = touch.clientY
+      tracking = true
+      e.preventDefault()
+    }
+  }
+
+  const onTouchMove = (e: TouchEvent) => {
+    if (!tracking || trackingId === null) return
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i]
+      if (touch.identifier === trackingId) {
+        dx += touch.clientX - lastX
+        dy += touch.clientY - lastY
+        lastX = touch.clientX
+        lastY = touch.clientY
+        e.preventDefault()
+        break
+      }
+    }
+  }
+
+  const onTouchEnd = (e: TouchEvent) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === trackingId) {
+        tracking = false
+        trackingId = null
+        break
+      }
+    }
+  }
+
+  const createButtons = () => {
+    buttonContainer = document.createElement('div')
+    buttonContainer.className = 'arc-touch-controls'
+    buttonContainer.innerHTML = `
+      <button class="arc-touch-btn arc-touch-bomb">BOMB</button>
+      <button class="arc-touch-btn arc-touch-special">SP</button>
+      <button class="arc-touch-btn arc-touch-pause">| |</button>
+    `
+    document.body.appendChild(buttonContainer)
+
+    const wire = (selector: string, cb: () => void) => {
+      const btn = buttonContainer!.querySelector(selector)!
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); cb() }, { passive: false })
+    }
+    wire('.arc-touch-bomb', () => { bombFlag = true })
+    wire('.arc-touch-special', () => { specialFlag = true })
+    wire('.arc-touch-pause', () => { pauseFlag = true })
+  }
+
+  return {
+    read() {
+      const keys = createEmptyKeys()
+      // Convert pixel deltas to arena-space units
+      // Approximate: screen height ≈ 60 arena units visible
+      const scale = 60 / Math.max(1, window.innerHeight)
+      keys.touchDx = dx * scale
+      keys.touchDy = -dy * scale // screen Y is inverted vs arena Y
+      dx = 0
+      dy = 0
+      keys.bomb = bombFlag
+      bombFlag = false
+      keys.special = specialFlag
+      specialFlag = false
+      keys.pause = pauseFlag
+      pauseFlag = false
+      return keys
+    },
+    attach() {
+      createButtons()
+      window.addEventListener('touchstart', onTouchStart, { passive: false })
+      window.addEventListener('touchmove', onTouchMove, { passive: false })
+      window.addEventListener('touchend', onTouchEnd)
+      window.addEventListener('touchcancel', onTouchEnd)
+    },
+    detach() {
+      buttonContainer?.remove()
+      buttonContainer = null
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('touchcancel', onTouchEnd)
+      dx = 0
+      dy = 0
+      tracking = false
+      trackingId = null
+    },
+  }
+}
+
+export function createMobileCombatInputHandler(): CombatInputHandler {
+  return createCombatInputHandler([
+    createKeyboardSource(PRIMARY_KEY_BINDINGS),
+    createTouchSource(),
+  ])
 }
