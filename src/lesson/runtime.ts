@@ -7,6 +7,7 @@ import { buildShell, renderUI, type UIElements } from '../ui/index'
 import { INTERACTIVE_PHASES } from '../types'
 import type { Phase, PlanetMission, SolarState } from '../types'
 import { ArcadeMode } from '../arcade'
+import { GameMusic, type MusicCue } from '../audio/music'
 import { CinematicController } from '../cinematic/cinematic'
 import {
   answerPuzzle,
@@ -41,6 +42,7 @@ export class SolarGameRuntime {
   private readonly sceneManager = new SceneManager()
   private readonly cameraController = new CameraController()
   private readonly clock = new Clock()
+  private readonly music = new GameMusic()
 
   private ctx!: GameContext<SolarState>
   private ui!: UIElements
@@ -166,6 +168,7 @@ export class SolarGameRuntime {
     this.arcadeMode = null
     this.clearTimers()
     this.cameraController.reset()
+    this.music.dispose()
     window.removeEventListener('resize', this.handleResize)
 
     const canvas = this.sceneManager.renderer?.domElement
@@ -356,11 +359,17 @@ export class SolarGameRuntime {
 
     this.clearTimers()
     this.setPhase('arcade')
-    this.arcadeMode = new ArcadeMode(this.ctx.bridge, this.sceneManager.renderer, this.ui.shell, () => {
-      this.arcadeMode = null
-      this.setPhase('end')
-      this.focusCurrentPlanet(false)
-    })
+    this.arcadeMode = new ArcadeMode(
+      this.ctx.bridge,
+      this.sceneManager.renderer,
+      this.ui.shell,
+      this.music,
+      () => {
+        this.arcadeMode = null
+        this.setPhase('end')
+        this.focusCurrentPlanet(false)
+      },
+    )
   }
 
   private doInit(data: unknown) {
@@ -374,6 +383,7 @@ export class SolarGameRuntime {
     this.initDataStore = data || DEFAULT_INIT_DATA
     this.missions = buildMissions(this.initDataStore)
     resetVoyageProgress(this.ctx.state)
+    this.music.warm()
 
     this.onReadyToken += 1
     this.updateUI()
@@ -597,7 +607,26 @@ export class SolarGameRuntime {
     this.sceneManager.controls.autoRotate = !this.cinematicActive && this.ctx.state.phase === 'briefing' && !this.cameraController.cameraDetached
     this.sceneManager.controls.autoRotateSpeed = 0.25
     this.sceneManager.controls.update()
+    this.music.setCue(this.resolveLessonCue())
 
     this.sceneManager.postProcessing.render()
+  }
+
+  private resolveLessonCue(): MusicCue {
+    if (this.cinematicActive) return 'cinematic'
+
+    switch (this.ctx.state.phase) {
+      case 'briefing':
+        return 'lesson_briefing'
+      case 'explore':
+        return 'lesson_explore'
+      case 'puzzle':
+        return 'lesson_puzzle'
+      case 'warp':
+        return 'lesson_warp'
+      case 'end':
+      case 'arcade':
+        return 'lesson_end'
+    }
   }
 }

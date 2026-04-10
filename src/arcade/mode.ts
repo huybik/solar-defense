@@ -25,7 +25,6 @@ import {
   type ShopTab,
   upgradeWeapon,
 } from './progression/shop'
-import { ArcadeMusic } from './render/music'
 import { applyCombatResults, advanceCampaignRoute as advanceCampaignRouteState } from './campaign-state'
 import {
   buildArcadeViewModel,
@@ -37,6 +36,7 @@ import {
 } from './mode-view'
 import { routeArcadeUiAction } from './ui-actions'
 import { flushDeferredDisposals } from './render/deferred-dispose'
+import { GameMusic } from '../audio/music'
 import type {
   ArcadeEvent,
   ArcadePhase,
@@ -53,7 +53,7 @@ export class ArcadeMode {
 
   private readonly bridge: GameBridge
   private readonly hud: ArcadeHUD
-  private readonly music = new ArcadeMusic()
+  private readonly music: GameMusic
   private readonly postProcessing: PostProcessing
   private readonly onExit: () => void
   private readonly arenaRoot = new Group()
@@ -73,9 +73,11 @@ export class ArcadeMode {
     bridge: GameBridge,
     renderer: WebGPURenderer,
     uiContainer: HTMLElement,
+    music: GameMusic,
     onExit: () => void,
   ) {
     this.bridge = bridge
+    this.music = music
     this.onExit = onExit
 
     this.scene = new Scene()
@@ -112,9 +114,12 @@ export class ArcadeMode {
 
       const snapshot = this.arena.getSnapshot()
       this.state = buildCombatState(this.state, snapshot, this.campaign?.score ?? 0)
-      this.music.setMood(
-        snapshot.planetId,
-        snapshot.boss ? 'boss' : snapshot.player.health < snapshot.player.maxHealth * 0.35 ? 'danger' : 'action',
+      this.music.setCue(
+        snapshot.boss
+          ? 'arcade_boss'
+          : snapshot.player.health < snapshot.player.maxHealth * 0.35
+            ? 'arcade_danger'
+            : 'arcade_action',
       )
 
       if (this.arena.isDone()) {
@@ -122,10 +127,8 @@ export class ArcadeMode {
       }
     } else {
       this.menuBackground?.update(delta)
-      this.music.setMood(this.resolveMenuPlanet(), 'calm')
+      this.music.setCue('arcade_menu')
     }
-
-    this.music.update(delta)
     this.hud.update(this.buildView())
   }
 
@@ -213,7 +216,6 @@ export class ArcadeMode {
   }
 
   dispose(): void {
-    this.music.stop()
     this.disposeArena()
     this.menuBackground?.dispose()
     this.menuBackground = null

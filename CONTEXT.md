@@ -23,6 +23,13 @@ On first standalone visit, a cinematic plays before the lesson begins. Camera fl
 - `src/cinematic/cinematic.ts`: `CinematicController` — orchestrates camera flyTo, voice, and UI through the sequence
 - `src/scene/camera.ts`: `flyTo()` method added for arbitrary position-to-position camera transitions (used by cinematic)
 
+## Music
+
+Shared background music now covers the full game loop: cinematic, lesson phases, voyage ending, and arcade menus/combat. Tracks are sourced from CC0 OpenGameArt packs and crossfaded through one Web Audio controller.
+
+- `src/audio/music.ts`: shared cue-based music controller and track loading/crossfade logic
+- `src/assets/music/SOURCES.md`: source URLs, authors, and licenses for bundled music tracks
+
 ## Architecture
 
 - `src/utils.ts`: shared utilities (`escapeHtml`, `clamp`, `lerp`) used by both lesson and arcade
