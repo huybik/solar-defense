@@ -1,6 +1,6 @@
 # Solar Defense
 
-Standalone Vite + TypeScript + Three.js WebGPU game served in an iframe through the shared game SDK.
+Vite + TypeScript + Three.js WebGPU game. Runs either inside the learnfun host via `@learnfun/game-sdk` or as a standalone deploy (no SDK required).
 
 ## Loop
 
@@ -18,6 +18,7 @@ Eight-planet route: Mercury to Neptune.
 - `src/utils.ts`: shared utilities (`escapeHtml`, `clamp`, `lerp`) used by both lesson and arcade
 - `src/types.ts`: shared types, constants (`INTERACTIVE_PHASES`), and `normalizeId` utility
 - `src/game.ts`: thin SDK-facing facade (`createGame()` wiring, actions, initial state) that delegates to `src/lesson/runtime.ts`
+- `src/sdk-shim.ts`: standalone stub for `@learnfun/game-sdk` — provides `createGame`, `GameBridge`, and type exports with no-op host communication; `vite.config.ts` auto-selects the real SDK or this shim based on whether `../_sdk/src` exists at build time
 - `src/lesson/`: lesson runtime split by responsibility — `runtime.ts` (scene/UI orchestration), `flow.ts` (hotspot/puzzle/phase helpers), `events.ts` (teacher event emission), `interactions.ts` (UI + pointer helpers)
 - `src/main.ts`: bridge registration and default init data
 - `src/style.css`: explorer/lesson styles (CSS vars, glass cards, mission UI, responsive)
