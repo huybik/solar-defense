@@ -86,6 +86,7 @@ export type ArcadeEvent =
   | { type: 'stage_clear'; score: number; credits: number; levelId: string }
   | { type: 'stage_failed'; levelId: string }
   | { type: 'challenge_complete'; label: string }
+  | { type: 'portal_entered' }
 
 export interface CombatResult {
   success: boolean

@@ -44,7 +44,9 @@ import {
   type ScheduledSpawn,
 } from './timeline'
 import { finalizeCombatResult } from './outcome'
+import { Portal } from './portal'
 import { applyPickupEffect } from './pickup-effects'
+import { getNextMainLevel } from '../data/campaign'
 import {
   ARENA,
   COMBAT_CONST,
@@ -139,6 +141,8 @@ export class Arena {
   private shieldBreakPlayed = false
   private secretProgress = 0
   private readonly earnedUpgrades: string[] = []
+  private portal: Portal | null = null
+  private readonly isFinalLevel: boolean
   private readonly ownedUpgrades: Set<string>
   private readonly modifiers: BossUpgradeModifiers
   private _cachedTargets: DamageableTarget[] = []
@@ -182,6 +186,7 @@ export class Arena {
     this.keyboard.attach()
     this.audio.ui()
 
+    this.isFinalLevel = getNextMainLevel(levelId) === null
     this.bossTriggerTime = createBossTriggerTime(this.level)
     this.waveMilestones = createWaveMilestones(this.bossTriggerTime)
 
@@ -276,9 +281,22 @@ export class Arena {
     this.group.position.set(this.vfx.getShakeOffset().x, this.vfx.getShakeOffset().y, 0)
 
     if (this.boss && this.boss.isDefeated()) {
-      this.beginClear(true)
+      if (this.isFinalLevel && !this.portal) {
+        this.spawnPortal()
+      }
+      if (!this.portal) this.beginClear(true)
     } else if (!this.level.hasBoss && this.elapsed >= this.level.duration && this.enemies.getActive().length === 0) {
       this.beginClear(true)
+    }
+
+    if (this.portal) {
+      this.portal.update(delta)
+      if (this.player.getState().alive && this.portal.checkCollision(this.player.getState().position)) {
+        events.push({ type: 'portal_entered' })
+        this.portal.dispose()
+        this.portal = null
+        this.beginClear(true)
+      }
     }
 
     if (!this.player.getState().alive && this.player.getState().lives <= 0) {
@@ -371,6 +389,7 @@ export class Arena {
     this.terrain.dispose()
     this.pickups.dispose()
     this.boss?.dispose()
+    this.portal?.dispose()
     this.playerBullets.dispose()
     this.enemyBullets.dispose()
     this.vfx.dispose()
@@ -1071,6 +1090,17 @@ export class Arena {
     this.background.flashBackground('#ffffff', 0.4)
     this.audio.explosion(true)
     events.push({ type: 'pickup_collected', pickupType: 'bomb', value: -1 })
+  }
+
+  private spawnPortal(): void {
+    const bossPos = this.boss?.getState()?.position
+    const x = bossPos?.x ?? 0
+    const y = bossPos?.y ?? 10
+    this.portal = new Portal(x, y)
+    this.group.add(this.portal.group)
+    this.audio.victory()
+    this.vfx.screenShake(0.6, 0.5)
+    this.latestComms = ['A PORTAL HAS OPENED — FLY INTO IT!']
   }
 
   private beginClear(success: boolean): void {

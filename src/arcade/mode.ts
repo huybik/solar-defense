@@ -401,10 +401,24 @@ export class ArcadeMode {
 
   private handleCombatEvent(event: ArcadeEvent): void {
     this.bridge.emitEvent(event.type, event as unknown as Record<string, unknown>)
+    if (event.type === 'portal_entered') {
+      this.navigateToPortal()
+      return
+    }
     const message = combatEventMessage(event)
     if (message) {
       this.message = message
     }
+  }
+
+  private navigateToPortal(): void {
+    const params = new URLSearchParams()
+    params.set('portal', 'true')
+    params.set('ref', window.location.origin + window.location.pathname)
+    params.set('username', 'pilot')
+    params.set('color', '#00ff88')
+    params.set('speed', '5')
+    window.location.href = 'https://portal.pieter.com?' + params.toString()
   }
 
   private abortCombat(message: string): void {
