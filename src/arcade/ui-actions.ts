@@ -15,6 +15,8 @@ export interface ArcadeUiActionContext {
   openBriefing: () => void
   launchLevel: () => void
   setShopTab: (tab: ShopTab) => void
+  openShop: () => void
+  closeShop: () => void
   runShopAction: (action: string, entryId: string, slot?: WeaponSlot) => void
   abortOrBackToMap: () => void
   continueDebrief: () => void
@@ -58,11 +60,10 @@ export function routeArcadeUiAction(
       ctx.launchLevel()
       return
     case 'open_shop':
-      ctx.setShopTab('front')
-      ctx.setPhase('shop')
+      ctx.openShop()
       return
     case 'close_shop':
-      ctx.setPhase('map')
+      ctx.closeShop()
       return
     case 'open_data_log':
       ctx.setSelectedLog(ctx.firstDataLogId)

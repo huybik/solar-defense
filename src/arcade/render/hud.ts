@@ -365,6 +365,13 @@ export class ArcadeHUD {
         <div class="arc-screen-inner">
           <span class="arc-eyebrow">${debrief.success ? 'MISSION COMPLETE' : 'MISSION FAILED'}</span>
           <h2 class="arc-title">${escapeHtml(debrief.levelName)}</h2>
+          ${debrief.success ? `
+            <div class="arc-debrief-shop-callout">
+              <span class="arc-status-label">Upgrade Window</span>
+              <button class="arc-btn arc-btn-primary arc-debrief-shop-btn" data-action="open_shop">OPEN SHOP</button>
+              <span class="arc-debrief-shop-wallet">Wallet <strong>${view.state.credits.toLocaleString()}c</strong></span>
+            </div>
+          ` : ''}
           <div class="arc-debrief-grid">
             <div><span>Score</span><strong>${debrief.scoreEarned.toLocaleString()}</strong></div>
             <div><span>Credits</span><strong>${debrief.creditsEarned.toLocaleString()}</strong></div>

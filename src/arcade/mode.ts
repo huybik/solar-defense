@@ -66,6 +66,7 @@ export class ArcadeMode {
   private saveSlots: Array<CampaignState | null> = listSaveSlots()
   private selectedLevelId = 'mercury_1'
   private shopTab: ShopTab = 'front'
+  private shopReturnPhase: ArcadePhase = 'map'
   private selectedLogId: string | null = null
   private message = 'Mission Control online.'
 
@@ -251,6 +252,8 @@ export class ArcadeMode {
       openBriefing: () => this.openBriefing(),
       launchLevel: () => { void this.launchLevel() },
       setShopTab: (tab) => { this.shopTab = tab },
+      openShop: () => this.openShop(),
+      closeShop: () => this.closeShop(),
       runShopAction: (shopAction, entryId, slot) => this.runNamedShopAction(shopAction, entryId, slot),
       abortOrBackToMap: () => this.backToMap(),
       continueDebrief: () => this.advanceCampaignRoute(),
@@ -452,6 +455,20 @@ export class ArcadeMode {
 
     this.persistCampaignState({ refreshSlots: false })
     this.setPhase('map')
+  }
+
+  private openShop(): void {
+    this.shopTab = 'front'
+    this.shopReturnPhase = this.state.phase === 'debrief' ? 'debrief' : 'map'
+    this.setPhase('shop')
+  }
+
+  private closeShop(): void {
+    const nextPhase = this.shopReturnPhase === 'debrief' && this.state.debrief
+      ? 'debrief'
+      : 'map'
+    this.shopReturnPhase = 'map'
+    this.setPhase(nextPhase)
   }
 
   private setPhase(phase: ArcadePhase): void {

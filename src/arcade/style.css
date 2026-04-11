@@ -1200,6 +1200,52 @@
 
 /* === DEBRIEF SCREEN === */
 
+.arc-debrief-shop-callout {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--arc-radius);
+  border: 1px solid rgba(245, 183, 49, 0.18);
+  border-left: 3px solid var(--arc-gold);
+  background:
+    linear-gradient(135deg, rgba(245, 183, 49, 0.08), rgba(34, 209, 238, 0.04)),
+    rgba(10, 18, 38, 0.72);
+  text-align: left;
+}
+
+.arc-debrief-shop-callout .arc-status-label {
+  margin-bottom: 0;
+}
+
+.arc-debrief-shop-btn {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.18em;
+}
+
+.arc-debrief-shop-wallet {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--arc-muted);
+  font-family: 'Saira Condensed', sans-serif;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.arc-debrief-shop-wallet strong {
+  font-family: 'Oxanium', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--arc-gold);
+  text-shadow: var(--arc-glow-gold);
+}
+
 .arc-debrief-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
