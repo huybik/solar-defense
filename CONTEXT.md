@@ -123,6 +123,8 @@ Esc pauses.
 
 ### Mobile / Touch Controls
 On touch-primary devices (`pointer: coarse`), Touhou-style drag-to-move input replaces keyboard for P1. Drag anywhere on screen to move the ship (relative movement, 1:1 mapped to arena units). On-screen BOMB, SP, and pause buttons appear during combat. Portrait orientation widens the camera FOV from 40° to 55° and clamps player movement to the visible area. Touch buttons are DOM overlays managed by `createTouchSource()` in `src/arcade/combat/player.ts`. Browser zoom/pan gestures are suppressed via `touch-action: none` and viewport meta.
+- Arcade combat now reapplies portrait viewport bounds as soon as a fight starts, and enemy spawn lanes clamp to the current visible combat width so mobile portrait runs do not spawn side/top waves offscreen.
+- `Attractor Field` pickup pull now uses distance-based magnetism with capped velocity in `src/arcade/combat/pickups.ts`, so drops start drifting in before they are already inside pickup range.
 
 ## Visual System
 
