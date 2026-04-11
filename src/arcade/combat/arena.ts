@@ -438,6 +438,7 @@ export class Arena {
     for (const player of this.players) {
       player.setMoveBounds(visibleHalfWidth)
     }
+    this.enemies.setViewportBounds(visibleHalfWidth)
   }
 
   isDone(): boolean {
