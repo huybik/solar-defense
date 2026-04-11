@@ -10,40 +10,55 @@ export interface EnemyUpdateContext {
   targets: Vec2[]
 }
 
-const SIDE_SPAWN_X = ARENA.HALF_W + 4.5
+const SPAWN_EDGE_MARGIN = 2.5
+const MIN_VISIBLE_HALF_WIDTH = 8
 
-function placementX(command: SpawnCommand, index: number, total: number): number {
-  if (typeof command.x === 'number') return command.x
+function spawnLimit(visibleHalfWidth: number): number {
+  return Math.max(
+    MIN_VISIBLE_HALF_WIDTH,
+    Math.min(ARENA.HALF_W - SPAWN_EDGE_MARGIN, visibleHalfWidth - SPAWN_EDGE_MARGIN),
+  )
+}
+
+function clampSpawnX(x: number, visibleHalfWidth: number): number {
+  const limit = spawnLimit(visibleHalfWidth)
+  return Math.max(-limit, Math.min(limit, x))
+}
+
+function placementX(command: SpawnCommand, index: number, total: number, visibleHalfWidth: number): number {
+  if (typeof command.x === 'number') return clampSpawnX(command.x, visibleHalfWidth)
+  const limit = spawnLimit(visibleHalfWidth)
   switch (command.x) {
     case 'left':
-      return -ARENA.HALF_W + 4 + index * 2.1
+      return clampSpawnX(-limit + 4 + index * 2.1, visibleHalfWidth)
     case 'right':
-      return ARENA.HALF_W - 4 - index * 2.1
+      return clampSpawnX(limit - 4 - index * 2.1, visibleHalfWidth)
     case 'center':
-      return (index - (total - 1) / 2) * (command.spacing ?? 2.4)
+      return clampSpawnX((index - (total - 1) / 2) * (command.spacing ?? 2.4), visibleHalfWidth)
     case 'random':
-      return randRange(-ARENA.HALF_W + 3, ARENA.HALF_W - 3)
+      return randRange(-limit, limit)
     case 'spread':
     default: {
       const spacing = command.spacing ?? 4
-      return (index - (total - 1) / 2) * spacing
+      return clampSpawnX((index - (total - 1) / 2) * spacing, visibleHalfWidth)
     }
   }
 }
 
-function spawnPosition(direction: SpawnDirection, x: number): Vec2 {
+function spawnPosition(direction: SpawnDirection, x: number, visibleHalfWidth: number): Vec2 {
+  const limit = spawnLimit(visibleHalfWidth)
   switch (direction) {
     case 'left':
-      return { x: -SIDE_SPAWN_X, y: randRange(6, ARENA.HALF_H - 4) }
+      return { x: -limit, y: randRange(6, ARENA.HALF_H - 4) }
     case 'right':
-      return { x: SIDE_SPAWN_X, y: randRange(6, ARENA.HALF_H - 4) }
+      return { x: limit, y: randRange(6, ARENA.HALF_H - 4) }
     case 'bottom':
-      return { x, y: -ARENA.HALF_H - 3 }
+      return { x: clampSpawnX(x, visibleHalfWidth), y: -ARENA.HALF_H - 3 }
     case 'sides':
-      return Math.random() > 0.5 ? spawnPosition('left', x) : spawnPosition('right', x)
+      return Math.random() > 0.5 ? spawnPosition('left', x, visibleHalfWidth) : spawnPosition('right', x, visibleHalfWidth)
     case 'top':
     default:
-      return { x, y: ARENA.HALF_H + 3 }
+      return { x: clampSpawnX(x, visibleHalfWidth), y: ARENA.HALF_H + 3 }
   }
 }
 
@@ -53,6 +68,7 @@ export class EnemyManager {
   private readonly planetId: PlanetId
   private readonly active: EnemyEntity[] = []
   private nextId = 1
+  private viewportHalfWidth = ARENA.HALF_W
   private progressionHealthMul = 1
   private difficulty: DifficultyScale = {
     enemyHealthMul: 1,
@@ -76,6 +92,10 @@ export class EnemyManager {
     this.progressionHealthMul = Math.max(1, multiplier)
   }
 
+  setViewportBounds(visibleHalfWidth: number): void {
+    this.viewportHalfWidth = Math.max(MIN_VISIBLE_HALF_WIDTH, visibleHalfWidth)
+  }
+
   spawn(command: SpawnCommand): void {
     const def = getEnemyDef(command.enemyType, this.planetId)
     const count = Math.max(1, Math.round(command.count * this.difficulty.enemyCountMul))
@@ -83,8 +103,8 @@ export class EnemyManager {
     const healthMul = this.difficulty.enemyHealthMul * this.progressionHealthMul
 
     for (let index = 0; index < count; index++) {
-      const x = placementX(command, index, count)
-      const position = spawnPosition(direction, x)
+      const x = placementX(command, index, count, this.viewportHalfWidth)
+      const position = spawnPosition(direction, x, this.viewportHalfWidth)
       const mesh = this.createMesh(def)
       const baseHealth = command.health ?? def.health
       const enemy: EnemyEntity = {

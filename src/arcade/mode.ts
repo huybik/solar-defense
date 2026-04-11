@@ -313,6 +313,13 @@ export class ArcadeMode {
     await preloadAtlases()
     this.disposeArena()
     this.arena = new Arena(this.arenaRoot, this.campaign, this.selectedLevelId)
+    const canvas = this.sceneManager.renderer?.domElement
+    if (canvas) {
+      this.handleResize(
+        Math.max(1, canvas.clientWidth || canvas.width),
+        Math.max(1, canvas.clientHeight || canvas.height),
+      )
+    }
     const level = getLevelDef(this.selectedLevelId)
     this.state = {
       ...this.state,
