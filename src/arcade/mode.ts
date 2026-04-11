@@ -54,6 +54,7 @@ export class ArcadeMode {
   private readonly bridge: GameBridge
   private readonly hud: ArcadeHUD
   private readonly music: GameMusic
+  private readonly renderer: WebGPURenderer
   private readonly postProcessing: PostProcessing
   private readonly onExit: () => void
   private readonly arenaRoot = new Group()
@@ -79,6 +80,7 @@ export class ArcadeMode {
   ) {
     this.bridge = bridge
     this.music = music
+    this.renderer = renderer
     this.onExit = onExit
 
     this.scene = new Scene()
@@ -86,7 +88,7 @@ export class ArcadeMode {
     this.scene.add(new AmbientLight('#ffffff', 1.1))
     this.scene.add(this.arenaRoot)
 
-    const aspect = renderer.domElement.width / renderer.domElement.height || 1
+    const aspect = this.renderer.domElement.width / this.renderer.domElement.height || 1
     this.camera = new PerspectiveCamera(40, aspect, 0.1, 200)
     this.camera.position.set(0, 0, 80)
     this.camera.lookAt(0, 0, 0)
@@ -94,7 +96,7 @@ export class ArcadeMode {
     const scenePass = pass(this.scene, this.camera)
     const sceneColor = scenePass.getTextureNode('output')
     const bloomPass = bloom(sceneColor, 0.35, 0.15, 0.6)
-    this.postProcessing = new PostProcessing(renderer)
+    this.postProcessing = new PostProcessing(this.renderer)
     this.postProcessing.outputNode = sceneColor.add(bloomPass)
     this.postProcessing.needsUpdate = true
 
@@ -313,13 +315,11 @@ export class ArcadeMode {
     await preloadAtlases()
     this.disposeArena()
     this.arena = new Arena(this.arenaRoot, this.campaign, this.selectedLevelId)
-    const canvas = this.sceneManager.renderer?.domElement
-    if (canvas) {
-      this.handleResize(
-        Math.max(1, canvas.clientWidth || canvas.width),
-        Math.max(1, canvas.clientHeight || canvas.height),
-      )
-    }
+    const canvas = this.renderer.domElement
+    this.handleResize(
+      Math.max(1, canvas.clientWidth || canvas.width),
+      Math.max(1, canvas.clientHeight || canvas.height),
+    )
     const level = getLevelDef(this.selectedLevelId)
     this.state = {
       ...this.state,
