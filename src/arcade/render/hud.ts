@@ -465,6 +465,7 @@ function renderEntryActions(tab: ShopTab, entry: ShopEntry): string {
         ? `<button class="arc-btn arc-btn-secondary" data-action="equip_entry" data-entry="${escapeHtml(entry.id)}">ARM</button>`
         : `<button class="arc-btn arc-btn-primary" data-action="buy_entry" data-entry="${escapeHtml(entry.id)}">BUY</button>`
       }
+      ${entry.owned ? `<button class="arc-btn arc-btn-secondary" data-action="upgrade_entry" data-entry="${escapeHtml(entry.id)}">UPGRADE</button>` : ''}
       ${entry.equipped && entry.cost > 0 ? `<button class="arc-btn arc-btn-secondary" data-action="sell_slot" data-slot="special">SELL</button>` : ''}
     `
   }
