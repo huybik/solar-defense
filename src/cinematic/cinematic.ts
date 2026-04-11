@@ -52,10 +52,14 @@ export class CinematicController {
 
   private async runSequence(done: () => void) {
     if (this.voice.needsActivation) {
-      this.ui.showText('Tap BEGIN TRANSMISSION to enable voice-over.')
+      this.ui.showText(
+        this.voice.supported
+          ? 'Tap BEGIN TRANSMISSION to enable voice-over.'
+          : 'Tap BEGIN TRANSMISSION to start the cinematic.',
+      )
       const activated = await this.ui.waitForActionButton(
         'BEGIN TRANSMISSION',
-        () => {},
+        () => this.voice.activate(),
         { signal: this.abortController.signal },
       )
       this.ui.hideText()

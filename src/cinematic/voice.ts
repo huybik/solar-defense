@@ -11,9 +11,11 @@ const VOLUME = 1.0;
 export class VoiceEngine {
   private ttsAvailable: boolean;
   private voice: SpeechSynthesisVoice | null = null;
+  private promptRequired: boolean;
 
   constructor() {
     this.ttsAvailable = typeof window !== 'undefined' && 'speechSynthesis' in window;
+    this.promptRequired = this.shouldRequirePrompt();
     if (!this.ttsAvailable) return;
 
     this.pickVoice();
@@ -26,7 +28,11 @@ export class VoiceEngine {
   }
 
   get needsActivation(): boolean {
-    return this.ttsAvailable && !(navigator.userActivation?.hasBeenActive ?? false);
+    return this.promptRequired;
+  }
+
+  activate(): void {
+    this.promptRequired = false;
   }
 
   speak(text: string): Promise<boolean> {
@@ -52,6 +58,16 @@ export class VoiceEngine {
   }
 
   // ── internal ──────────────────────────────────────────
+
+  private shouldRequirePrompt(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    if (window.matchMedia?.('(pointer: coarse)').matches) {
+      return true;
+    }
+
+    return this.ttsAvailable && !(navigator.userActivation?.hasBeenActive ?? false);
+  }
 
   private pickVoice(): void {
     const voices = speechSynthesis.getVoices();
