@@ -152,11 +152,21 @@ export interface BossAttackDef {
     | 'tentacles'
     | 'missiles'
     | 'shatter'
+    | 'curtain'
   bulletCount: number
   bulletSpeed: number
   teacherHint: string
   vulnerabilityWindow?: boolean
   hazardType?: HazardType
+  gapCount?: number
+  layers?: number
+  arms?: number
+  spreadAngle?: number
+  beamCount?: number
+  originOffsets?: number[]
+  waveAmplitude?: number
+  waveFrequency?: number
+  homing?: number
 }
 
 export interface BossPhaseDef {

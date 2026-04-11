@@ -11,13 +11,12 @@ function attack(
     id,
     label,
     bulletPattern: pattern,
-    duration: options.duration ?? 8,
-    fireInterval: options.fireInterval ?? 1.2,
-    bulletCount: options.bulletCount ?? 10,
-    bulletSpeed: options.bulletSpeed ?? 16,
     teacherHint,
-    vulnerabilityWindow: options.vulnerabilityWindow,
-    hazardType: options.hazardType,
+    duration: 8,
+    fireInterval: 1.2,
+    bulletCount: 10,
+    bulletSpeed: 16,
+    ...options,
   }
 }
 
@@ -39,13 +38,14 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
     ],
     attacks: [
       attack('forge_fireballs', 'Aimed Fireballs', 'barrage', 'Strafe between the turret lanes.', { bulletCount: 7, fireInterval: 1.1, bulletSpeed: 16 }),
-      attack('forge_heat_beam', 'Heat Sweep', 'beam_sweep', 'Telegraph lines show the beam path.', { duration: 7, fireInterval: 2.2, bulletSpeed: 18 }),
+      attack('forge_heat_beam', 'Heat Sweep', 'beam_sweep', 'Telegraph lines show the beam path.', { duration: 7, fireInterval: 2.2, bulletSpeed: 18, beamCount: 4 }),
       attack('forge_lava', 'Floor Is Lava', 'hazard', 'Climb above the fire wave and keep moving.', { duration: 10, fireInterval: 1.7, hazardType: 'lightning' }),
+      attack('forge_crucible', 'Crucible Ring', 'ring', 'Two opposite gates rotate together. Commit to one side.', { bulletCount: 16, bulletSpeed: 15, fireInterval: 1.25, layers: 2, gapCount: 2 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['forge_fireballs'], tint: '#f7b36a', teacherHint: 'Watch the turret rhythm.' },
       { healthThreshold: 0.62, attackIds: ['forge_heat_beam', 'forge_fireballs'], tint: '#ffd08f', teacherHint: 'The beams sweep after a bright telegraph.' },
-      { healthThreshold: 0.3, attackIds: ['forge_lava', 'forge_heat_beam'], tint: '#fff0c7', teacherHint: 'The bottom lane becomes lethal during lava bursts.', vulnerable: true },
+      { healthThreshold: 0.3, attackIds: ['forge_lava', 'forge_crucible', 'forge_heat_beam'], tint: '#fff0c7', teacherHint: 'Late phase alternates lava with paired rotating gates.', vulnerable: true },
     ],
   },
   acid_empress: {
@@ -65,13 +65,14 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
     ],
     attacks: [
       attack('acid_rain', 'Acid Rain', 'hazard', 'Keep moving through the falling gaps.', { duration: 9, fireInterval: 0.8, bulletCount: 12, hazardType: 'acid_rain' }),
-      attack('poison_spray', 'Poison Spray', 'barrage', 'Move diagonally through the cone.', { bulletCount: 9, fireInterval: 1.1 }),
+      attack('poison_spray', 'Poison Spray', 'barrage', 'Move diagonally through the cone.', { bulletCount: 9, fireInterval: 1.1, spreadAngle: 0.15 }),
       attack('cloud_cover', 'Cloud Cover', 'hazard', 'The screen dims before homing shots launch.', { duration: 8, fireInterval: 1.2, hazardType: 'darkness' }),
+      attack('acid_veil', 'Acid Veil', 'curtain', 'The veil drops in sheets with shifting holes.', { bulletCount: 14, bulletSpeed: 15, fireInterval: 1.3, gapCount: 2, layers: 2, waveAmplitude: 0.4, waveFrequency: 5.5 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['acid_rain'], tint: '#87f06b', teacherHint: 'The rain is random but leaves open lanes.' },
       { healthThreshold: 0.65, attackIds: ['poison_spray', 'acid_rain'], tint: '#c0ff9e', teacherHint: 'Cut the cone from the outside edge.' },
-      { healthThreshold: 0.28, attackIds: ['cloud_cover', 'poison_spray'], tint: '#edffd7', teacherHint: 'Only the glowing core stays fully visible.', vulnerable: true },
+      { healthThreshold: 0.28, attackIds: ['cloud_cover', 'acid_veil', 'poison_spray'], tint: '#edffd7', teacherHint: 'The final cloud phase hides a moving acid curtain behind the haze.', vulnerable: true },
     ],
   },
   orbital_sentinel: {
@@ -90,14 +91,15 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
       { id: 'panel_right', sprite: 'spaceStation_023', offset: { x: 3.6, y: 0 }, health: 27, radius: 0.95 },
     ],
     attacks: [
-      attack('missile_barrage', 'Missile Barrage', 'missiles', 'Curve through the homing missiles before they tighten.', { bulletCount: 6, fireInterval: 1.4, bulletSpeed: 14 }),
-      attack('laser_grid', 'Laser Grid', 'beam_sweep', 'The crossing beams leave safe boxes. Hold them.', { duration: 8, fireInterval: 2 }),
+      attack('missile_barrage', 'Missile Barrage', 'missiles', 'Curve through the homing missiles before they tighten.', { bulletCount: 6, fireInterval: 1.4, bulletSpeed: 14, originOffsets: [-3.6, 3.6], homing: 0.1 }),
+      attack('laser_grid', 'Laser Grid', 'beam_sweep', 'The crossing beams leave safe boxes. Hold them.', { duration: 8, fireInterval: 2, beamCount: 4 }),
       attack('drone_swarm', 'Drone Swarm', 'barrage', 'Destroy the orbiting drones to open the core.', { bulletCount: 12, fireInterval: 0.9, vulnerabilityWindow: true }),
+      attack('crossfire_lattice', 'Crossfire Lattice', 'barrage', 'The side panels weave crossing lanes. Commit to one early.', { bulletCount: 5, fireInterval: 1, bulletSpeed: 16, originOffsets: [-3.6, 3.6], spreadAngle: 0.13, waveAmplitude: 0.45, waveFrequency: 6.2 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['missile_barrage'], tint: '#79d7ff', teacherHint: 'Missiles drift before locking hard.' },
       { healthThreshold: 0.68, attackIds: ['laser_grid', 'missile_barrage'], tint: '#b8ecff', teacherHint: 'Wait for the grid to form, then move once.' },
-      { healthThreshold: 0.3, attackIds: ['drone_swarm', 'laser_grid'], tint: '#ebfaff', teacherHint: 'The exposed core only opens between drone launches.', vulnerable: true },
+      { healthThreshold: 0.3, attackIds: ['drone_swarm', 'crossfire_lattice', 'laser_grid'], tint: '#ebfaff', teacherHint: 'Final phase adds side-panel crossfire before the exposed core opens.', vulnerable: true },
     ],
   },
   dust_devil: {
@@ -116,14 +118,15 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
       { id: 'segment_b', sprite: 'spaceParts_023', offset: { x: 2.8, y: -1.4 }, health: 29, radius: 0.9 },
     ],
     attacks: [
-      attack('sand_spiral', 'Sand Spiral', 'spiral', 'Ride the lanes between the sand coils.', { bulletCount: 18, fireInterval: 1.1, bulletSpeed: 17 }),
+      attack('sand_spiral', 'Sand Spiral', 'spiral', 'Ride the lanes between the sand coils.', { bulletCount: 18, fireInterval: 1.1, bulletSpeed: 17, arms: 4, spreadAngle: 0.24 }),
       attack('tornado_pull', 'Tornado Pull', 'gravity_pull', 'Lean against the pull before the burst.', { duration: 8, fireInterval: 1.5, bulletCount: 14 }),
       attack('segment_break', 'Segment Break', 'barrage', 'Each broken segment becomes its own threat.', { duration: 8, fireInterval: 0.8, bulletCount: 12, vulnerabilityWindow: true }),
+      attack('sandfall', 'Sandfall', 'curtain', 'The sand wall drops in stacked rows. Find the lane before it closes.', { bulletCount: 15, bulletSpeed: 15, fireInterval: 1.1, gapCount: 2, layers: 2, waveAmplitude: 0.35, waveFrequency: 4.5 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['sand_spiral'], tint: '#f08a64', teacherHint: 'The spiral leaves predictable lanes.' },
       { healthThreshold: 0.64, attackIds: ['tornado_pull', 'sand_spiral'], tint: '#ffc3ab', teacherHint: 'Counter the pull early, not late.' },
-      { healthThreshold: 0.27, attackIds: ['segment_break', 'tornado_pull'], tint: '#ffe7dd', teacherHint: 'Break off the side segments to calm the arena.', vulnerable: true },
+      { healthThreshold: 0.27, attackIds: ['segment_break', 'sandfall', 'tornado_pull'], tint: '#ffe7dd', teacherHint: 'The last phase layers sand walls on top of the pull. Move early.', vulnerable: true },
     ],
   },
   storm_king: {
@@ -144,12 +147,13 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
     attacks: [
       attack('lightning_columns', 'Lightning Columns', 'hazard', 'Move after the warning shafts brighten.', { duration: 8, fireInterval: 0.7, bulletCount: 10, hazardType: 'lightning' }),
       attack('storm_bands', 'Storm Bands', 'ring', 'Rotate with the safe wedge in each band.', { bulletCount: 20, fireInterval: 1.3, bulletSpeed: 15 }),
-      attack('eye_beam', 'Eye Beam', 'beam_sweep', 'The eye charge exposes the weak point.', { duration: 7, fireInterval: 1.9, vulnerabilityWindow: true }),
+      attack('eye_beam', 'Eye Beam', 'beam_sweep', 'The eye charge exposes the weak point.', { duration: 7, fireInterval: 1.9, vulnerabilityWindow: true, beamCount: 4 }),
+      attack('cyclone_crown', 'Cyclone Crown', 'ring', 'Paired gates rotate fast. Pick one orbit and stay with it.', { bulletCount: 24, bulletSpeed: 16, fireInterval: 1.15, layers: 2, gapCount: 2, waveAmplitude: 0.24, waveFrequency: 4.2 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['lightning_columns'], tint: '#f1be75', teacherHint: 'Column warnings linger before striking.' },
       { healthThreshold: 0.62, attackIds: ['storm_bands', 'lightning_columns'], tint: '#f8d8aa', teacherHint: 'Rotate with the bands instead of cutting through them.' },
-      { healthThreshold: 0.24, attackIds: ['eye_beam', 'storm_bands'], tint: '#fff1db', teacherHint: 'The eye beam is dangerous but it is also the damage window.', vulnerable: true },
+      { healthThreshold: 0.24, attackIds: ['eye_beam', 'cyclone_crown', 'storm_bands'], tint: '#fff1db', teacherHint: 'Late storm rings leave paired gates before the eye opens.', vulnerable: true },
     ],
   },
   ring_guardian: {
@@ -169,13 +173,14 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
     ],
     attacks: [
       attack('ring_shield', 'Ring Shield', 'ring', 'Track the opening in the rotating ring.', { bulletCount: 22, fireInterval: 1.25, bulletSpeed: 14 }),
-      attack('spiral_arms', 'Spiral Arms', 'spiral', 'Move between arms before they widen.', { bulletCount: 24, fireInterval: 1.05, bulletSpeed: 16 }),
+      attack('spiral_arms', 'Spiral Arms', 'spiral', 'Move between arms before they widen.', { bulletCount: 24, fireInterval: 1.05, bulletSpeed: 16, arms: 4, spreadAngle: 0.26 }),
       attack('gravity_well', 'Gravity Well', 'gravity_pull', 'The core opens during the pull. Commit to damage.', { duration: 8, fireInterval: 1.4, bulletCount: 16, vulnerabilityWindow: true }),
+      attack('shard_lance', 'Shard Lance', 'barrage', 'Twin ring lances converge through the center. Shift off-axis early.', { bulletCount: 4, fireInterval: 1, bulletSpeed: 17, originOffsets: [-3.8, 3.8], spreadAngle: 0.1, homing: 0.035, waveAmplitude: 0.55, waveFrequency: 6 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['ring_shield'], tint: '#e9d49f', teacherHint: 'The ring always leaves one safe gate.' },
       { healthThreshold: 0.62, attackIds: ['spiral_arms', 'ring_shield'], tint: '#f5e8c2', teacherHint: 'Take the outer lane and mirror the spiral.' },
-      { healthThreshold: 0.26, attackIds: ['gravity_well', 'spiral_arms'], tint: '#fff6de', teacherHint: 'The pull is dangerous, but the core is fully exposed.', vulnerable: true },
+      { healthThreshold: 0.26, attackIds: ['gravity_well', 'shard_lance', 'spiral_arms'], tint: '#fff6de', teacherHint: 'Twin lances converge from the rings before the gravity pull opens the core.', vulnerable: true },
     ],
   },
   ice_titan: {
@@ -195,13 +200,14 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
     ],
     attacks: [
       attack('ice_shards', 'Ice Shards', 'barrage', 'Slide through the shard fan before it closes.', { bulletCount: 11, fireInterval: 0.95, bulletSpeed: 18 }),
-      attack('freeze_ray', 'Freeze Ray', 'beam_sweep', 'The frozen lane lingers. Rotate to a clean side.', { duration: 8, fireInterval: 1.8 }),
+      attack('freeze_ray', 'Freeze Ray', 'beam_sweep', 'The frozen lane lingers. Rotate to a clean side.', { duration: 8, fireInterval: 1.8, beamCount: 4 }),
       attack('shatter', 'Shatter', 'shatter', 'Back off during the charge, then dive in after the burst.', { duration: 8, fireInterval: 1.2, bulletCount: 18, vulnerabilityWindow: true }),
+      attack('glacier_fall', 'Glacier Fall', 'curtain', 'Icicle sheets stack from above. Hold the moving lane.', { bulletCount: 16, bulletSpeed: 16, fireInterval: 1.05, gapCount: 2, layers: 2, waveAmplitude: 0.2, waveFrequency: 4 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['ice_shards'], tint: '#95e8f1', teacherHint: 'The shards arrive in clean fans.' },
       { healthThreshold: 0.64, attackIds: ['freeze_ray', 'ice_shards'], tint: '#c4fbff', teacherHint: 'The freeze lanes stay active a moment after the beam.' },
-      { healthThreshold: 0.25, attackIds: ['shatter', 'freeze_ray'], tint: '#edffff', teacherHint: 'After the shatter burst the titan core is exposed.', vulnerable: true },
+      { healthThreshold: 0.25, attackIds: ['shatter', 'glacier_fall', 'freeze_ray'], tint: '#edffff', teacherHint: 'The final phase stacks icicle curtains before the shatter opening.', vulnerable: true },
     ],
   },
   void_leviathan: {
@@ -223,11 +229,13 @@ export const BOSS_DEFS: Record<string, BossConfig> = {
       attack('tentacle_swipe', 'Tentacle Swipe', 'tentacles', 'The sweep starts from the edges. Move through the center late.', { bulletCount: 10, fireInterval: 1.1, bulletSpeed: 16 }),
       attack('ink_cloud', 'Ink Cloud', 'hazard', 'Keep close to muzzle flashes while the arena darkens.', { duration: 8, fireInterval: 1, hazardType: 'darkness' }),
       attack('maelstrom', 'Maelstrom', 'gravity_pull', 'Destroy the eye during the pull to break the vortex.', { duration: 9, fireInterval: 1.15, bulletCount: 16, vulnerabilityWindow: true }),
+      attack('tentacle_crossfire', 'Tentacle Crossfire', 'barrage', 'Converging shots sweep in from both flanks. Commit to one lane.', { bulletCount: 5, fireInterval: 0.95, bulletSpeed: 17, originOffsets: [-4.4, 4.4], spreadAngle: 0.11, homing: 0.04, waveAmplitude: 0.7, waveFrequency: 7 }),
+      attack('abyss_bloom', 'Abyss Bloom', 'ring', 'Opposing void petals rotate fast. Ride the paired gap.', { bulletCount: 28, bulletSpeed: 17, fireInterval: 1, layers: 2, gapCount: 2, waveAmplitude: 0.3, waveFrequency: 5.4 }),
     ],
     phases: [
       { healthThreshold: 1, attackIds: ['tentacle_swipe'], tint: '#698dff', teacherHint: 'The side beams tell you where the swipe lands.' },
       { healthThreshold: 0.62, attackIds: ['ink_cloud', 'tentacle_swipe'], tint: '#abc0ff', teacherHint: 'Stay near the brightest area during the cloud.' },
-      { healthThreshold: 0.22, attackIds: ['maelstrom', 'ink_cloud'], tint: '#dfe7ff', teacherHint: 'The final eye phase is the only stable damage window.', vulnerable: true },
+      { healthThreshold: 0.22, attackIds: ['maelstrom', 'tentacle_crossfire', 'abyss_bloom'], tint: '#dfe7ff', teacherHint: 'The final eye phase alternates vortex pulls with converging crossfire and void blooms.', vulnerable: true },
     ],
   },
 

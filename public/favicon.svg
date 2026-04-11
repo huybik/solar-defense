@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Solar Defense favicon">
+  <defs>
+    <linearGradient id="space" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0a1630"/>
+      <stop offset="1" stop-color="#02050d"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.42" cy="0.36" r="0.72">
+      <stop offset="0" stop-color="#fff2a6"/>
+      <stop offset="0.55" stop-color="#ffbf47"/>
+      <stop offset="1" stop-color="#f36a1f"/>
+    </radialGradient>
+    <linearGradient id="shield" x1="16" y1="12" x2="46" y2="55" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8cecff"/>
+      <stop offset="1" stop-color="#389dff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#space)"/>
+  <g fill="#d7e9ff" opacity="0.85">
+    <circle cx="14" cy="15" r="1.5"/>
+    <circle cx="19" cy="24" r="1"/>
+    <circle cx="49" cy="13" r="1.4"/>
+    <circle cx="52" cy="22" r="1"/>
+    <circle cx="46" cy="48" r="1.2"/>
+  </g>
+  <circle cx="32" cy="28" r="16" fill="#ff8d21" opacity="0.12"/>
+  <circle cx="32" cy="28" r="12.5" fill="url(#sun)"/>
+  <path d="M32 10C44 10 52 18.2 52 30.2C52 43.1 44.1 53.5 32 58C19.9 53.5 12 43.1 12 30.2C12 18.2 20 10 32 10Z" fill="#0b1835" fill-opacity="0.18"/>
+  <path d="M32 10C44 10 52 18.2 52 30.2C52 43.1 44.1 53.5 32 58C19.9 53.5 12 43.1 12 30.2C12 18.2 20 10 32 10Z" fill="none" stroke="url(#shield)" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M44 18L45.5 21.6L49 23L45.5 24.4L44 28L42.6 24.4L39 23L42.6 21.6Z" fill="#fff3ab" opacity="0.9"/>
+  <path d="M32 36L39 46H34.5L32 53L29.5 46H25Z" fill="#e9fbff"/>
+  <circle cx="32" cy="43.5" r="1.5" fill="#0b1835"/>
+</svg>

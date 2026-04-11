@@ -96,6 +96,7 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 - Mini-bosses: 1 phase, 1 core part (no removable parts), 2 attacks, ~40-50% full boss HP
 - Full bosses: 3 phases, core + 2 removable parts, 3 attacks, vulnerability windows, rage mode at ~90s
 - Both use the same `BossController` class — mini-bosses are purely a data difference
+- Boss attacks are now more data-driven: `BossAttackDef` supports extra pattern modifiers (`layers`, `gapCount`, `arms`, `beamCount`, `originOffsets`, wave/homing tuning) plus a new `curtain` pattern, and late full-boss phases use those richer mixes instead of only recycling the original attack trio
 - Arena now computes boss trigger from both stage duration and the latest authored spawn/hazard beat so bosses stay the finale even on scripted mini/full-boss stages
 
 ### Weapon mastery

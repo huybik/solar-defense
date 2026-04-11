@@ -10,7 +10,7 @@ import {
 } from 'three/webgpu'
 import { ARENA, COMBAT_CONST, type ArcadeEvent, type BossConfig, type BossEntity, type BossPartState, type HazardCommand, type Vec2 } from '../types'
 import { nearest } from '../utils'
-import type { BulletPool } from './bullets'
+import type { BulletPool, ProjectileSpawn } from './bullets'
 import { createGlowSprite, loadPlane, loadSprite } from '../render/sprites'
 import { disposeMaterialLater, removeAndDisposeObjectLater } from '../render/deferred-dispose'
 
@@ -19,6 +19,7 @@ export interface BossUpdateResult {
   hazards: HazardCommand[]
 }
 
+type BossAttack = BossConfig['attacks'][number]
 
 export class BossController {
   private readonly parent: Group
@@ -201,14 +202,16 @@ export class BossController {
   }
 
   private updateVisuals(delta: number): void {
+    const attack = this.currentAttack()
+    const ringLikeAttack = attack.bulletPattern === 'ring' || attack.bulletPattern === 'gravity_pull' || attack.bulletPattern === 'shatter'
     this.coreGlow.material.rotation += delta * 0.25
     ;(this.coreGlow.material as SpriteMaterial).opacity = 0.28 + Math.sin(this.introElapsed * 4) * 0.08 + (this.state.vulnerable ? 0.12 : 0)
     ;(this.body.material as SpriteMaterial).color = new Color(this.config.phases[this.state.phase]?.tint ?? this.config.accent)
     this.ringMesh.rotation.z += delta * (this.state.rage ? 1.8 : 1.1)
-    ;(this.ringMesh.material as MeshBasicMaterial).opacity = this.currentAttack().label.includes('Ring') ? 0.34 : 0.14
+    ;(this.ringMesh.material as MeshBasicMaterial).opacity = ringLikeAttack ? 0.34 : attack.bulletPattern === 'curtain' ? 0.2 : 0.14
   }
 
-  private fireAttack(attack: BossConfig['attacks'][number], targets: Vec2[]): void {
+  private fireAttack(attack: BossAttack, targets: Vec2[]): void {
     switch (attack.bulletPattern) {
       case 'ring':
         this.fireRing(attack)
@@ -245,116 +248,127 @@ export class BossController {
         this.state.vulnerable = true
         this.pendingEvents.push({ type: 'boss_vulnerable', name: this.config.name })
         break
+      case 'curtain':
+        this.fireCurtain(attack)
+        break
     }
   }
 
-  private fireRing(attack: BossConfig['attacks'][number]): void {
-    const gapCenter = this.introElapsed * 0.9
-    const gapSize = Math.PI / 5
-    for (let index = 0; index < attack.bulletCount; index++) {
-      const angle = (index / attack.bulletCount) * Math.PI * 2
-      let diff = angle - gapCenter
-      while (diff > Math.PI) diff -= Math.PI * 2
-      while (diff < -Math.PI) diff += Math.PI * 2
-      if (Math.abs(diff) < gapSize) continue
-      this.bullets.spawn({
-        owner: 'enemy',
-        weaponId: this.config.id,
-        slot: 'enemy',
-        type: 'bullet',
-        position: {
-          x: this.state.position.x + Math.cos(angle) * this.config.radius,
-          y: this.state.position.y + Math.sin(angle) * this.config.radius,
-        },
-        velocity: { x: Math.cos(angle) * attack.bulletSpeed, y: Math.sin(angle) * attack.bulletSpeed },
-        radius: 0.34,
-        damage: 4,
-        sprite: 'laserRed11',
-        maxAge: 4,
-        scale: 1,
-        tint: this.config.accent,
-      })
-    }
-  }
+  private fireRing(attack: BossAttack): void {
+    const layers = Math.max(1, attack.layers ?? 1)
+    const gapCount = Math.max(1, attack.gapCount ?? 1)
+    const gapSize = gapCount > 1 ? Math.PI / 8 : Math.PI / 5
 
-  private fireSpiral(attack: BossConfig['attacks'][number]): void {
-    const arms = 3
-    const bulletsPerArm = Math.max(4, Math.floor(attack.bulletCount / arms))
-    for (let arm = 0; arm < arms; arm++) {
-      const base = this.introElapsed * 1.4 + (arm / arms) * Math.PI * 2
-      for (let index = 0; index < bulletsPerArm; index++) {
-        const angle = base + index * 0.22
-        this.bullets.spawn({
-          owner: 'enemy',
-          weaponId: this.config.id,
-          slot: 'enemy',
-          type: 'bullet',
-          position: { x: this.state.position.x, y: this.state.position.y },
-          velocity: { x: Math.cos(angle) * attack.bulletSpeed, y: Math.sin(angle) * attack.bulletSpeed },
-          radius: 0.3,
+    for (let layer = 0; layer < layers; layer++) {
+      const ringCenter = this.introElapsed * 0.9 + (layer / layers) * (Math.PI / Math.max(attack.bulletCount, 8))
+      const radius = this.config.radius + layer * 0.55
+      const bulletSpeed = attack.bulletSpeed + layer * 0.75
+      for (let index = 0; index < attack.bulletCount; index++) {
+        const angle = ringCenter + (index / attack.bulletCount) * Math.PI * 2
+        let inGap = false
+        for (let gapIndex = 0; gapIndex < gapCount; gapIndex++) {
+          let diff = angle - (ringCenter + (gapIndex / gapCount) * Math.PI * 2)
+          while (diff > Math.PI) diff -= Math.PI * 2
+          while (diff < -Math.PI) diff += Math.PI * 2
+          if (Math.abs(diff) < gapSize) {
+            inGap = true
+            break
+          }
+        }
+        if (inGap) continue
+        this.spawnAttackProjectile(attack, {
+          position: {
+            x: this.state.position.x + Math.cos(angle) * radius,
+            y: this.state.position.y + Math.sin(angle) * radius,
+          },
+          velocity: { x: Math.cos(angle) * bulletSpeed, y: Math.sin(angle) * bulletSpeed },
+          radius: 0.34,
           damage: 4,
-          sprite: 'laserRed13',
+          sprite: 'laserRed11',
           maxAge: 4,
-          scale: 0.95,
-          tint: this.config.accent,
+          scale: 1,
         })
       }
     }
   }
 
-  private fireSweep(attack: BossConfig['attacks'][number]): void {
-    const xPositions = [-8, 0, 8]
+  private fireSpiral(attack: BossAttack): void {
+    const arms = Math.max(2, attack.arms ?? 3)
+    const bulletsPerArm = Math.max(4, Math.floor(attack.bulletCount / arms))
+    const step = attack.spreadAngle ?? 0.22
+    const origins = this.attackOrigins(attack)
+    for (let originIndex = 0; originIndex < origins.length; originIndex++) {
+      const origin = origins[originIndex]
+      const originPhase = origins.length > 1 ? (originIndex / origins.length) * Math.PI : 0
+      for (let arm = 0; arm < arms; arm++) {
+        const base = this.introElapsed * 1.4 + originPhase + (arm / arms) * Math.PI * 2
+        for (let index = 0; index < bulletsPerArm; index++) {
+          const angle = base + index * step
+          this.spawnAttackProjectile(attack, {
+            position: { ...origin },
+            velocity: { x: Math.cos(angle) * attack.bulletSpeed, y: Math.sin(angle) * attack.bulletSpeed },
+            radius: 0.3,
+            damage: 4,
+            sprite: 'laserRed13',
+            maxAge: 4,
+            scale: 0.95,
+          })
+        }
+      }
+    }
+  }
+
+  private fireSweep(attack: BossAttack): void {
+    const beamCount = Math.max(1, attack.beamCount ?? 3)
+    const xPositions = attack.originOffsets?.length
+      ? attack.originOffsets.map((offset) => this.state.position.x + offset)
+      : beamCount === 1
+        ? [this.state.position.x]
+        : Array.from({ length: beamCount }, (_, index) => {
+            const span = Math.min(ARENA.WIDTH - 12, 8 * (beamCount - 1))
+            return this.state.position.x - span / 2 + (index / (beamCount - 1)) * span
+          })
     for (const x of xPositions) {
-      this.bullets.spawn({
-        owner: 'enemy',
-        weaponId: this.config.id,
-        slot: 'enemy',
+      this.spawnAttackProjectile(attack, {
         type: 'beam',
-        position: { x: this.state.position.x + x, y: 0 },
+        position: { x, y: 0 },
         radius: 0.7,
         damage: 5,
         sprite: 'beam5',
         beamLength: ARENA.HEIGHT,
         maxAge: 0.55,
         scale: 1.1,
-        tint: this.config.accent,
       })
     }
   }
 
-  private fireBarrage(attack: BossConfig['attacks'][number], targets: Vec2[]): void {
-    const target = nearest(this.state.position, targets) ?? { x: 0, y: -ARENA.HALF_H }
-    const dx = target.x - this.state.position.x
-    const dy = target.y - this.state.position.y
-    const base = Math.atan2(dx, dy)
-    const count = Math.max(1, Math.min(attack.bulletCount, 9))
-    const spread = 0.18
-    for (let index = 0; index < count; index++) {
-      const offset = (index - (count - 1) / 2) * spread
-      this.bullets.spawn({
-        owner: 'enemy',
-        weaponId: this.config.id,
-        slot: 'enemy',
-        type: 'bullet',
-        position: { ...this.state.position },
-        velocity: { x: Math.sin(base + offset) * attack.bulletSpeed, y: Math.cos(base + offset) * attack.bulletSpeed },
-        radius: 0.34,
-        damage: 4,
-        sprite: 'laserRed09',
-        maxAge: 4.2,
-        scale: 1,
-        homing: attack.label.includes('Missile') ? 0.08 : 0,
-        tint: this.config.accent,
-      })
+  private fireBarrage(attack: BossAttack, targets: Vec2[]): void {
+    const origins = this.attackOrigins(attack)
+    const count = Math.max(1, Math.min(attack.bulletCount, 15))
+    const spread = attack.spreadAngle ?? 0.18
+    for (const origin of origins) {
+      const target = nearest(origin, targets) ?? { x: 0, y: -ARENA.HALF_H }
+      const dx = target.x - origin.x
+      const dy = target.y - origin.y
+      const base = Math.atan2(dx, dy)
+      for (let index = 0; index < count; index++) {
+        const offset = (index - (count - 1) / 2) * spread
+        this.spawnAttackProjectile(attack, {
+          position: { ...origin },
+          velocity: { x: Math.sin(base + offset) * attack.bulletSpeed, y: Math.cos(base + offset) * attack.bulletSpeed },
+          radius: 0.34,
+          damage: 4,
+          sprite: 'laserRed09',
+          maxAge: 4.2,
+          scale: 1,
+        })
+      }
     }
   }
 
-  private fireTentacles(attack: BossConfig['attacks'][number]): void {
+  private fireTentacles(attack: BossAttack): void {
     for (const side of [-1, 1]) {
-      this.bullets.spawn({
-        owner: 'enemy',
-        weaponId: this.config.id,
-        slot: 'enemy',
+      this.spawnAttackProjectile(attack, {
         type: 'beam',
         position: { x: side * (ARENA.HALF_W - 2), y: this.state.position.y - 6 },
         radius: 0.8,
@@ -363,32 +377,85 @@ export class BossController {
         beamLength: 18,
         maxAge: 0.45,
         scale: 1,
-        tint: this.config.accent,
       })
     }
   }
 
-  private fireMissiles(attack: BossConfig['attacks'][number], targets: Vec2[]): void {
-    const target = nearest(this.state.position, targets)
-    if (!target) return
-    for (let index = 0; index < Math.max(2, attack.bulletCount); index++) {
-      const offset = (index - (attack.bulletCount - 1) / 2) * 0.3
-      this.bullets.spawn({
-        owner: 'enemy',
-        weaponId: this.config.id,
-        slot: 'enemy',
+  private fireMissiles(attack: BossAttack, targets: Vec2[]): void {
+    if (!nearest(this.state.position, targets)) return
+    const missileCount = Math.max(2, attack.bulletCount)
+    const origins = this.attackOrigins(attack, this.state.position.y - 1)
+    const perOrigin = Math.ceil(missileCount / origins.length)
+    for (let index = 0; index < missileCount; index++) {
+      const origin = origins[index % origins.length]
+      const localIndex = Math.floor(index / origins.length)
+      const offset = (localIndex - (perOrigin - 1) / 2) * 0.3
+      this.spawnAttackProjectile(attack, {
         type: 'missile',
-        position: { x: this.state.position.x + offset * 2, y: this.state.position.y - 1 },
+        position: { x: origin.x + offset * 2, y: origin.y },
         velocity: { x: offset * 2, y: -attack.bulletSpeed },
         radius: 0.44,
         damage: 5,
         sprite: 'spaceMissiles_004',
         maxAge: 4.8,
         scale: 1.1,
-        homing: 0.1,
-        tint: this.config.accent,
+        homing: attack.homing ?? 0.1,
       })
     }
+  }
+
+  private fireCurtain(attack: BossAttack): void {
+    const layers = Math.max(1, attack.layers ?? 1)
+    const gapCount = Math.max(1, attack.gapCount ?? 1)
+    const count = Math.max(8, attack.bulletCount)
+    const left = -ARENA.HALF_W + 4
+    const width = ARENA.WIDTH - 8
+    const step = count > 1 ? width / (count - 1) : 0
+    const gapHalfWidth = Math.max(step * 0.95, width / (count * 3))
+
+    for (let layer = 0; layer < layers; layer++) {
+      const drift = ((this.introElapsed * 0.16) + layer * 0.22) % 1
+      const gapCenters = Array.from({ length: gapCount }, (_, gapIndex) => (
+        left + ((drift + gapIndex / gapCount) % 1) * width
+      ))
+      for (let index = 0; index < count; index++) {
+        const x = left + step * index
+        if (gapCenters.some((center) => Math.abs(x - center) < gapHalfWidth)) continue
+        this.spawnAttackProjectile(attack, {
+          position: { x, y: ARENA.HALF_H - 1.5 - layer * 1.2 },
+          velocity: { x: 0, y: -(attack.bulletSpeed + layer * 0.8) },
+          radius: 0.32,
+          damage: 4,
+          sprite: 'laserRed13',
+          maxAge: 5,
+          scale: 0.95,
+        })
+      }
+    }
+  }
+
+  private attackOrigins(attack: BossAttack, y = this.state.position.y): Vec2[] {
+    const offsets = attack.originOffsets?.length ? attack.originOffsets : [0]
+    return offsets.map((offset) => ({ x: this.state.position.x + offset, y }))
+  }
+
+  private spawnAttackProjectile(
+    attack: BossAttack,
+    config: Omit<ProjectileSpawn, 'owner' | 'weaponId' | 'slot' | 'tint' | 'waveAmplitude' | 'waveFrequency'> & {
+      type?: ProjectileSpawn['type']
+    },
+  ): void {
+    this.bullets.spawn({
+      owner: 'enemy',
+      weaponId: this.config.id,
+      slot: 'enemy',
+      tint: this.config.accent,
+      waveAmplitude: attack.waveAmplitude,
+      waveFrequency: attack.waveFrequency,
+      ...config,
+      type: config.type ?? (attack.waveAmplitude && attack.waveFrequency ? 'wave' : 'bullet'),
+      homing: config.homing ?? attack.homing ?? 0,
+    })
   }
 
   private advanceAttack(): void {
