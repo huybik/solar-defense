@@ -367,7 +367,7 @@ export class PlayerController {
   }
 
   setMoveBounds(halfW: number): void {
-    this.halfWBound = Math.min(ARENA.HALF_W - 0.4, halfW - 1)
+    this.halfWBound = Math.min(ARENA.HALF_W - 0.4, halfW - PLAYER_CONST.BASE_RADIUS)
   }
 
   private move(input: CombatInputEdges, delta: number): void {
