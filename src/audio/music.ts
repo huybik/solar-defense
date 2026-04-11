@@ -92,23 +92,36 @@ export class GameMusic {
   private active: Channel | null = null
   private readonly buffers = new Map<TrackId, AudioBuffer>()
   private readonly inflight = new Map<TrackId, Promise<AudioBuffer>>()
+  private activated = false
   private disposed = false
   private requestId = 0
   private currentCue: MusicCue | null = null
   private currentPlanet: MusicPlanet | null = null
   private currentTrack: TrackId | null = null
+  private warmRequested = false
 
   warm(): void {
     if (this.disposed) return
+    this.warmRequested = true
+    if (this.activated) this.preloadAllTracks()
+  }
+
+  activate(): void {
+    if (this.disposed) return
+
+    this.activated = true
     this.ensure()
-    for (const trackId of Object.keys(TRACKS) as TrackId[]) {
-      void this.loadTrack(trackId)
+    this.resume()
+
+    if (this.warmRequested) this.preloadAllTracks()
+    if (this.currentCue && !this.active) {
+      this.setCue(this.currentCue, this.currentPlanet)
     }
   }
 
   setCue(cue: MusicCue | null, planet: MusicPlanet | null = null): void {
     if (this.disposed) return
-    if (cue === this.currentCue && planet === this.currentPlanet) {
+    if (cue === this.currentCue && planet === this.currentPlanet && this.active) {
       this.resume()
       return
     }
@@ -116,6 +129,11 @@ export class GameMusic {
     this.currentCue = cue
     this.currentPlanet = planet
     this.requestId += 1
+
+    if (!this.activated) {
+      this.currentTrack = cue ? this.resolveCue(cue, planet).trackId : null
+      return
+    }
 
     if (!cue) {
       this.currentTrack = null
@@ -136,7 +154,7 @@ export class GameMusic {
 
     this.currentTrack = next.trackId
     const requestId = this.requestId
-    void this.activate(next.trackId, next.volume, requestId).catch(() => {
+    void this.activateTrack(next.trackId, next.volume, requestId).catch(() => {
       if (requestId !== this.requestId) return
       this.currentCue = null
       this.currentTrack = null
@@ -167,6 +185,12 @@ export class GameMusic {
 
     this.buffers.clear()
     this.inflight.clear()
+  }
+
+  private preloadAllTracks(): void {
+    for (const trackId of Object.keys(TRACKS) as TrackId[]) {
+      void this.loadTrack(trackId)
+    }
   }
 
   private ensure(): AudioContext {
@@ -201,7 +225,7 @@ export class GameMusic {
     return { ...config, trackId }
   }
 
-  private async activate(trackId: TrackId, volume: number, requestId: number): Promise<void> {
+  private async activateTrack(trackId: TrackId, volume: number, requestId: number): Promise<void> {
     const buffer = await this.loadTrack(trackId)
     if (
       requestId !== this.requestId

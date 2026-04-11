@@ -27,6 +27,8 @@ On first standalone visit, a cinematic plays before the lesson begins. Camera fl
 
 Shared background music now covers the full game loop: cinematic, lesson phases, voyage ending, and arcade menus/combat. Lesson and mission-menu cues now resolve to planet-specific CC0 themes (Mercury through Neptune) while warp/danger/boss moments still use the shared escalation tracks, all crossfaded through one Web Audio controller.
 
+- Audio contexts stay dormant until the first real page gesture (`pointerdown` or `keydown`), then the runtime unlocks lesson music plus arcade SFX so browsers do not emit autoplay-policy warnings before interaction.
+
 - `src/audio/music.ts`: shared cue-based music controller and track loading/crossfade logic
 - `src/assets/music/SOURCES.md`: source URLs, authors, and licenses for bundled music tracks
 
@@ -138,3 +140,4 @@ On touch-primary devices (`pointer: coarse`), Touhou-style drag-to-move input re
 - Command-center title/map/briefing phases now render a planet backdrop too, so new campaigns no longer sit on an empty black canvas between fights
 - Missile exhaust now uses pooled point-trail VFX so authored `trailColor` values render without per-missile trail mesh churn
 - Arcade combat teardown now defers sprite/material/geometry disposal until after render, side-entry enemies spawn fully offscreen again, and empty VFX point clouds hide instead of issuing WebGPU zero-vertex draw warnings
+- Deferred arcade disposals now age across multiple render flushes and only force-drain on full runtime teardown, which avoids WebGPU destroyed-texture warnings during menu/combat scene swaps

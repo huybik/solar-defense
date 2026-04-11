@@ -35,7 +35,6 @@ import {
   levelSummary,
 } from './mode-view'
 import { routeArcadeUiAction } from './ui-actions'
-import { flushDeferredDisposals } from './render/deferred-dispose'
 import { GameMusic } from '../audio/music'
 import type {
   ArcadeEvent,
@@ -59,6 +58,7 @@ export class ArcadeMode {
   private readonly onExit: () => void
   private readonly arenaRoot = new Group()
 
+  private audioActivated = false
   private arena: Arena | null = null
   private menuBackground: BackgroundController | null = null
   private menuBackgroundPlanet: PlanetId | null = null
@@ -141,7 +141,12 @@ export class ArcadeMode {
 
   render(): void {
     this.postProcessing.render()
-    flushDeferredDisposals()
+  }
+
+  activateAudio(): void {
+    this.audioActivated = true
+    this.music.activate()
+    this.arena?.activateAudio()
   }
 
   handleResize(width: number, height: number): void {
@@ -236,7 +241,6 @@ export class ArcadeMode {
     this.menuBackgroundPlanet = null
     this.hud.dispose()
     this.postProcessing.dispose()
-    flushDeferredDisposals()
   }
 
   private handleUiAction(action: string, params: Record<string, string>): void {
@@ -315,6 +319,7 @@ export class ArcadeMode {
     await preloadAtlases()
     this.disposeArena()
     this.arena = new Arena(this.arenaRoot, this.campaign, this.selectedLevelId)
+    if (this.audioActivated) this.arena.activateAudio()
     const canvas = this.renderer.domElement
     this.handleResize(
       Math.max(1, canvas.clientWidth || canvas.width),

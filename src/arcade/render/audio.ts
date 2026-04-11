@@ -47,9 +47,16 @@ export class ArcadeAudio {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private roleBuffers = new Map<string, AudioBuffer[]>()
+  private activated = false
   private loading = false
 
-  private ensure(): AudioContext {
+  activate(): void {
+    this.activated = true
+    this.ensure()
+  }
+
+  private ensure(): AudioContext | null {
+    if (!this.activated) return null
     if (!this.ctx) {
       this.ctx = new AudioContext()
       this.master = this.ctx.createGain()
@@ -90,16 +97,16 @@ export class ArcadeAudio {
   }
 
   play(role: keyof typeof ROLES): void {
-    this.ensure()
-    if (!this.ctx || this.ctx.state !== 'running') return
+    const ctx = this.ensure()
+    if (!ctx || ctx.state !== 'running') return
     const config = ROLES[role]
     const pool = this.roleBuffers.get(role)
     if (!config || !pool || pool.length === 0 || !this.master) return
 
-    const source = this.ctx.createBufferSource()
+    const source = ctx.createBufferSource()
     source.buffer = pool[Math.floor(Math.random() * pool.length)]
     source.playbackRate.value = randomBetween(config.rateRange[0], config.rateRange[1])
-    const gain = this.ctx.createGain()
+    const gain = ctx.createGain()
     gain.gain.value = config.volume
     source.connect(gain).connect(this.master)
     source.start()

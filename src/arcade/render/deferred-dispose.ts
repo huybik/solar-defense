@@ -13,7 +13,11 @@ type DisposableObject = {
   material?: DisposableMaterial | DisposableMaterial[]
 }
 
-const pendingDisposals: Array<() => void> = []
+const DISPOSAL_DELAY_FLUSHES = 3
+const pendingDisposals = Array.from(
+  { length: DISPOSAL_DELAY_FLUSHES + 1 },
+  (): Array<() => void> => [],
+)
 
 function disposeMaterial(material: DisposableMaterial | DisposableMaterial[], disposeMap: boolean): void {
   if (Array.isArray(material)) {
@@ -37,7 +41,7 @@ export function disposeMaterialLater(
   options: { disposeMap?: boolean } = {},
 ): void {
   const { disposeMap = false } = options
-  pendingDisposals.push(() => disposeMaterial(material, disposeMap))
+  pendingDisposals[pendingDisposals.length - 1].push(() => disposeMaterial(material, disposeMap))
 }
 
 export function removeAndDisposeObjectLater(
@@ -46,7 +50,7 @@ export function removeAndDisposeObjectLater(
 ): void {
   const { disposeGeometry = true, disposeMap = false } = options
   object.removeFromParent()
-  pendingDisposals.push(() => {
+  pendingDisposals[pendingDisposals.length - 1].push(() => {
     if (disposeGeometry && object.geometry && typeof object.geometry.dispose === 'function') {
       object.geometry.dispose()
     }
@@ -54,9 +58,23 @@ export function removeAndDisposeObjectLater(
   })
 }
 
-export function flushDeferredDisposals(): void {
-  while (pendingDisposals.length > 0) {
-    const dispose = pendingDisposals.shift()
+export function flushDeferredDisposals(options: { force?: boolean } = {}): void {
+  const { force = false } = options
+
+  if (force) {
+    for (const bucket of pendingDisposals) {
+      while (bucket.length > 0) {
+        const dispose = bucket.shift()
+        dispose?.()
+      }
+    }
+    return
+  }
+
+  const ready = pendingDisposals.shift()
+  pendingDisposals.push([])
+  while (ready && ready.length > 0) {
+    const dispose = ready.shift()
     dispose?.()
   }
 }

@@ -473,6 +473,10 @@ export class Arena {
     return this.earnedUpgrades
   }
 
+  activateAudio(): void {
+    this.audio.activate()
+  }
+
   forceFinish(success: boolean): ArcadeEvent[] {
     if (this.result.ended) return []
 

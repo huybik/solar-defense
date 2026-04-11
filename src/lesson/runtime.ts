@@ -7,6 +7,7 @@ import { buildShell, renderUI, type UIElements } from '../ui/index'
 import { INTERACTIVE_PHASES } from '../types'
 import type { Phase, PlanetMission, SolarState } from '../types'
 import { ArcadeMode } from '../arcade'
+import { flushDeferredDisposals } from '../arcade/render/deferred-dispose'
 import { GameMusic, type MusicCue } from '../audio/music'
 import { CinematicController } from '../cinematic/cinematic'
 import {
@@ -57,6 +58,7 @@ export class SolarGameRuntime {
   private onReadyToken = 0
   private pointerState = createLessonPointerState()
   private arcadeMode: ArcadeMode | null = null
+  private audioActivated = false
   private cinematicActive = false
   private lastRenderedPlanetIndex = -1
 
@@ -64,6 +66,8 @@ export class SolarGameRuntime {
     this.ctx = ctx
     this.ui = buildShell(ctx.root)
     this.ui.shell.addEventListener('click', this.handleUiClick)
+    this.ui.shell.addEventListener('pointerdown', this.handleFirstGesture)
+    window.addEventListener('keydown', this.handleFirstGesture)
     this.doInit(data)
   }
 
@@ -181,7 +185,10 @@ export class SolarGameRuntime {
     }
 
     this.ui.shell.removeEventListener('click', this.handleUiClick)
+    this.ui.shell.removeEventListener('pointerdown', this.handleFirstGesture)
+    window.removeEventListener('keydown', this.handleFirstGesture)
     this.sceneManager.dispose()
+    flushDeferredDisposals({ force: true })
     this.setupPromise = null
   }
 
@@ -370,6 +377,7 @@ export class SolarGameRuntime {
         this.focusCurrentPlanet(false)
       },
     )
+    if (this.audioActivated) this.arcadeMode.activateAudio()
   }
 
   private doInit(data: unknown) {
@@ -467,6 +475,13 @@ export class SolarGameRuntime {
     this.ctx.sync()
   }
 
+  private activateAudio() {
+    if (this.audioActivated) return
+    this.audioActivated = true
+    this.music.activate()
+    this.arcadeMode?.activateAudio()
+  }
+
   private focusCurrentPlanet(animate: boolean) {
     const mission = this.currentMission()
     if (!mission || !this.sceneManager.camera || !this.sceneManager.controls) return
@@ -515,6 +530,10 @@ export class SolarGameRuntime {
         this.doInit(this.initDataStore)
         return
     }
+  }
+
+  private readonly handleFirstGesture = () => {
+    this.activateAudio()
   }
 
   private readonly handleResize = () => {
@@ -593,6 +612,7 @@ export class SolarGameRuntime {
     if (this.ctx.state.phase === 'arcade' && this.arcadeMode) {
       this.arcadeMode.update(delta)
       this.arcadeMode.render()
+      flushDeferredDisposals()
       return
     }
 
@@ -610,6 +630,7 @@ export class SolarGameRuntime {
     this.music.setCue(this.resolveLessonCue(), mission?.id ?? null)
 
     this.sceneManager.postProcessing.render()
+    flushDeferredDisposals()
   }
 
   private resolveLessonCue(): MusicCue {
