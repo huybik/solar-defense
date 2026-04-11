@@ -1,6 +1,6 @@
 import type { Group, SpriteMaterial } from 'three/webgpu'
 import { ARENA, type PickupEntity, type PickupType, type Vec2 } from '../types'
-import { circleHit, disposeMesh } from '../utils'
+import { disposeMesh } from '../utils'
 import { loadSprite } from '../render/sprites'
 
 const PICKUP_SPRITES: Record<PickupType, string> = {
@@ -70,15 +70,35 @@ export class PickupManager {
       pickup.position.x += pickup.velocity.x * delta
       pickup.position.y += pickup.velocity.y * delta
 
-      const attractor = attractors.find(({ point, radius }) =>
-        circleHit(pickup.position.x, pickup.position.y, 0, point.x, point.y, radius),
-      )
+      let attractor: { point: Vec2; radius: number; distance: number } | null = null
+      for (const candidate of attractors) {
+        const dx = candidate.point.x - pickup.position.x
+        const dy = candidate.point.y - pickup.position.y
+        const distance = Math.hypot(dx, dy)
+        const reach = candidate.radius + pickup.radius + 2.4
+        if (distance > reach) continue
+        if (!attractor || distance < attractor.distance) {
+          attractor = { ...candidate, distance }
+        }
+      }
+
       if (attractor) {
         const dx = attractor.point.x - pickup.position.x
         const dy = attractor.point.y - pickup.position.y
-        const length = Math.hypot(dx, dy) || 1
-        pickup.velocity.x += (dx / length) * delta * 28
-        pickup.velocity.y += (dy / length) * delta * 28
+        const distance = Math.max(attractor.distance, 0.001)
+        const reach = attractor.radius + pickup.radius + 2.4
+        const pull = Math.max(0, 1 - distance / reach)
+        const accel = (18 + attractor.radius * 3.5) * pull
+        pickup.velocity.x += (dx / distance) * accel * delta
+        pickup.velocity.y += (dy / distance) * accel * delta
+
+        const speed = Math.hypot(pickup.velocity.x, pickup.velocity.y)
+        const maxSpeed = Math.max(8, attractor.radius * 2.5)
+        if (speed > maxSpeed) {
+          const scale = maxSpeed / speed
+          pickup.velocity.x *= scale
+          pickup.velocity.y *= scale
+        }
       }
 
       if (pickup.mesh) {
@@ -99,7 +119,8 @@ export class PickupManager {
     const collected: PickupEntity[] = []
     for (const pickup of this.pickups) {
       if (!pickup.alive) continue
-      if (!circleHit(pickup.position.x, pickup.position.y, pickup.radius, position.x, position.y, radius)) continue
+      const distance = Math.hypot(pickup.position.x - position.x, pickup.position.y - position.y)
+      if (distance > pickup.radius + radius) continue
       pickup.alive = false
       collected.push(pickup)
       this.kill(pickup)
