@@ -25,7 +25,7 @@ On first standalone visit, a cinematic plays before the lesson begins. Camera fl
 
 ## Music
 
-Shared background music now covers the full game loop: cinematic, lesson phases, voyage ending, and arcade menus/combat. Tracks are sourced from CC0 OpenGameArt packs and crossfaded through one Web Audio controller.
+Shared background music now covers the full game loop: cinematic, lesson phases, voyage ending, and arcade menus/combat. Lesson and mission-menu cues now resolve to planet-specific CC0 themes (Mercury through Neptune) while warp/danger/boss moments still use the shared escalation tracks, all crossfaded through one Web Audio controller.
 
 - `src/audio/music.ts`: shared cue-based music controller and track loading/crossfade logic
 - `src/assets/music/SOURCES.md`: source URLs, authors, and licenses for bundled music tracks

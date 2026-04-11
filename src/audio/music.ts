@@ -1,16 +1,38 @@
 import bossBattleLoopUrl from '../assets/music/boss-battle-loop.mp3'
+import deadShipUrl from '../assets/music/dead-ship.ogg'
+import deepSpaceArrayUrl from '../assets/music/deep-space-array.ogg'
+import galacticTempleUrl from '../assets/music/galactic-temple.ogg'
 import outInSpaceUrl from '../assets/music/out-in-space.ogg'
 import outInSpaceMenuUrl from '../assets/music/out-in-space-menu.ogg'
+import outThereUrl from '../assets/music/out-there.ogg'
+import outerSpaceLoopUrl from '../assets/music/outer-space-loop.mp3'
+import searchingUrl from '../assets/music/searching.ogg'
 import spaceBattleUrl from '../assets/music/space-battle.ogg'
+import type { PlanetId } from '../arcade/types/core'
+import type { PlanetVisualKind } from '../types'
 
-type TrackId = 'out_in_space_menu' | 'out_in_space' | 'space_battle' | 'boss_battle'
+type TrackId =
+  | 'boss_battle'
+  | 'dead_ship'
+  | 'deep_space_array'
+  | 'galactic_temple'
+  | 'out_in_space'
+  | 'out_in_space_menu'
+  | 'out_there'
+  | 'outer_space_loop'
+  | 'searching'
+  | 'space_battle'
+
+type MusicPlanet = PlanetVisualKind | PlanetId
 
 interface TrackConfig {
   url: string
 }
 
 interface CueConfig {
-  trackId: TrackId
+  fallbackTrackId?: TrackId
+  trackId?: TrackId
+  usePlanetTrack?: boolean
   volume: number
 }
 
@@ -25,21 +47,39 @@ const FADE_SECONDS = 0.75
 const SILENT_GAIN = 0.0001
 
 const TRACKS: Record<TrackId, TrackConfig> = {
-  out_in_space_menu: { url: outInSpaceMenuUrl },
-  out_in_space: { url: outInSpaceUrl },
-  space_battle: { url: spaceBattleUrl },
   boss_battle: { url: bossBattleLoopUrl },
+  dead_ship: { url: deadShipUrl },
+  deep_space_array: { url: deepSpaceArrayUrl },
+  galactic_temple: { url: galacticTempleUrl },
+  out_in_space: { url: outInSpaceUrl },
+  out_in_space_menu: { url: outInSpaceMenuUrl },
+  out_there: { url: outThereUrl },
+  outer_space_loop: { url: outerSpaceLoopUrl },
+  searching: { url: searchingUrl },
+  space_battle: { url: spaceBattleUrl },
+}
+
+const PLANET_TRACKS: Record<MusicPlanet, TrackId> = {
+  mercury: 'searching',
+  venus: 'outer_space_loop',
+  earth: 'out_in_space_menu',
+  mars: 'out_there',
+  jupiter: 'galactic_temple',
+  saturn: 'out_in_space',
+  uranus: 'dead_ship',
+  neptune: 'deep_space_array',
+  secret: 'space_battle',
 }
 
 const CUES = {
   cinematic: { trackId: 'out_in_space_menu', volume: 0.42 },
-  lesson_briefing: { trackId: 'out_in_space_menu', volume: 0.56 },
-  lesson_explore: { trackId: 'out_in_space', volume: 0.62 },
-  lesson_puzzle: { trackId: 'out_in_space', volume: 0.58 },
+  lesson_briefing: { fallbackTrackId: 'out_in_space_menu', usePlanetTrack: true, volume: 0.56 },
+  lesson_explore: { fallbackTrackId: 'out_in_space', usePlanetTrack: true, volume: 0.62 },
+  lesson_puzzle: { fallbackTrackId: 'out_in_space', usePlanetTrack: true, volume: 0.58 },
   lesson_warp: { trackId: 'space_battle', volume: 0.48 },
-  lesson_end: { trackId: 'out_in_space_menu', volume: 0.6 },
-  arcade_menu: { trackId: 'out_in_space_menu', volume: 0.54 },
-  arcade_action: { trackId: 'space_battle', volume: 0.46 },
+  lesson_end: { fallbackTrackId: 'out_in_space_menu', usePlanetTrack: true, volume: 0.6 },
+  arcade_menu: { fallbackTrackId: 'out_in_space_menu', usePlanetTrack: true, volume: 0.54 },
+  arcade_action: { fallbackTrackId: 'space_battle', usePlanetTrack: true, volume: 0.46 },
   arcade_danger: { trackId: 'boss_battle', volume: 0.44 },
   arcade_boss: { trackId: 'boss_battle', volume: 0.5 },
 } as const satisfies Record<string, CueConfig>
@@ -55,6 +95,7 @@ export class GameMusic {
   private disposed = false
   private requestId = 0
   private currentCue: MusicCue | null = null
+  private currentPlanet: MusicPlanet | null = null
   private currentTrack: TrackId | null = null
 
   warm(): void {
@@ -65,14 +106,15 @@ export class GameMusic {
     }
   }
 
-  setCue(cue: MusicCue | null): void {
+  setCue(cue: MusicCue | null, planet: MusicPlanet | null = null): void {
     if (this.disposed) return
-    if (cue === this.currentCue) {
+    if (cue === this.currentCue && planet === this.currentPlanet) {
       this.resume()
       return
     }
 
     this.currentCue = cue
+    this.currentPlanet = planet
     this.requestId += 1
 
     if (!cue) {
@@ -82,7 +124,7 @@ export class GameMusic {
       return
     }
 
-    const next = CUES[cue]
+    const next = this.resolveCue(cue, planet)
     this.ensure()
     this.resume()
 
@@ -105,6 +147,7 @@ export class GameMusic {
     this.disposed = true
     this.requestId += 1
     this.currentCue = null
+    this.currentPlanet = null
     this.currentTrack = null
 
     if (this.active) {
@@ -143,6 +186,19 @@ export class GameMusic {
     if (this.ctx?.state === 'suspended') {
       void this.ctx.resume()
     }
+  }
+
+  private resolveCue(cue: MusicCue, planet: MusicPlanet | null): CueConfig & { trackId: TrackId } {
+    const config = CUES[cue]
+    const trackId = config.usePlanetTrack
+      ? (planet ? PLANET_TRACKS[planet] : null) ?? config.fallbackTrackId ?? config.trackId
+      : config.trackId ?? config.fallbackTrackId
+
+    if (!trackId) {
+      throw new Error(`Music cue is missing a track: ${cue}`)
+    }
+
+    return { ...config, trackId }
   }
 
   private async activate(trackId: TrackId, volume: number, requestId: number): Promise<void> {

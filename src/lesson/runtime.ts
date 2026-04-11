@@ -607,7 +607,7 @@ export class SolarGameRuntime {
     this.sceneManager.controls.autoRotate = !this.cinematicActive && this.ctx.state.phase === 'briefing' && !this.cameraController.cameraDetached
     this.sceneManager.controls.autoRotateSpeed = 0.25
     this.sceneManager.controls.update()
-    this.music.setCue(this.resolveLessonCue())
+    this.music.setCue(this.resolveLessonCue(), mission?.id ?? null)
 
     this.sceneManager.postProcessing.render()
   }

@@ -123,6 +123,7 @@ export class ArcadeMode {
           : anyPilotInDanger
             ? 'arcade_danger'
             : 'arcade_action',
+        snapshot.planetId,
       )
 
       if (this.arena.isDone()) {
@@ -130,7 +131,7 @@ export class ArcadeMode {
       }
     } else {
       this.menuBackground?.update(delta)
-      this.music.setCue('arcade_menu')
+      this.music.setCue('arcade_menu', this.resolveMenuPlanet())
     }
     this.hud.update(this.buildView())
   }
