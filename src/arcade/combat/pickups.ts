@@ -1,5 +1,5 @@
 import type { Group, SpriteMaterial } from 'three/webgpu'
-import { ARENA, type PickupEntity, type PickupType, type Vec2 } from '../types'
+import { ARENA, PLAYER_CONST, type PickupEntity, type PickupType, type Vec2 } from '../types'
 import { disposeMesh } from '../utils'
 import { loadSprite } from '../render/sprites'
 
@@ -67,15 +67,13 @@ export class PickupManager {
       if (!pickup.alive) continue
 
       pickup.age += delta
-      pickup.position.x += pickup.velocity.x * delta
-      pickup.position.y += pickup.velocity.y * delta
 
       let attractor: { point: Vec2; radius: number; distance: number } | null = null
       for (const candidate of attractors) {
         const dx = candidate.point.x - pickup.position.x
         const dy = candidate.point.y - pickup.position.y
         const distance = Math.hypot(dx, dy)
-        const reach = candidate.radius + pickup.radius + 2.4
+        const reach = candidate.radius + PLAYER_CONST.PICKUP_RADIUS + pickup.radius + 6
         if (distance > reach) continue
         if (!attractor || distance < attractor.distance) {
           attractor = { ...candidate, distance }
@@ -86,20 +84,26 @@ export class PickupManager {
         const dx = attractor.point.x - pickup.position.x
         const dy = attractor.point.y - pickup.position.y
         const distance = Math.max(attractor.distance, 0.001)
-        const reach = attractor.radius + pickup.radius + 2.4
-        const pull = Math.max(0, 1 - distance / reach)
-        const accel = (18 + attractor.radius * 3.5) * pull
+        const reach = attractor.radius + PLAYER_CONST.PICKUP_RADIUS + pickup.radius + 6
+        const pull = 0.25 + Math.max(0, 1 - distance / reach) * 0.75
+        const drag = Math.max(0, 1 - delta * 5)
+        const accel = (28 + attractor.radius * 5) * pull
+        pickup.velocity.x *= drag
+        pickup.velocity.y *= drag
         pickup.velocity.x += (dx / distance) * accel * delta
         pickup.velocity.y += (dy / distance) * accel * delta
 
         const speed = Math.hypot(pickup.velocity.x, pickup.velocity.y)
-        const maxSpeed = Math.max(8, attractor.radius * 2.5)
+        const maxSpeed = Math.max(12, attractor.radius * 6)
         if (speed > maxSpeed) {
           const scale = maxSpeed / speed
           pickup.velocity.x *= scale
           pickup.velocity.y *= scale
         }
       }
+
+      pickup.position.x += pickup.velocity.x * delta
+      pickup.position.y += pickup.velocity.y * delta
 
       if (pickup.mesh) {
         pickup.mesh.position.set(pickup.position.x, pickup.position.y, 0.3)
