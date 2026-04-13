@@ -1,5 +1,5 @@
 import { normalizeId } from '../types'
-import type { Phase, PlanetMission, SolarState } from '../types'
+import type { PlanetMission, SolarState } from '../types'
 
 export function resolveHotspot(mission: PlanetMission, value: string) {
   const normalized = normalizeId(value)
@@ -50,29 +50,27 @@ export function answerPuzzle(
   }
 }
 
+function resetMissionProgress(state: SolarState): void {
+  state.scannedHotspots = []
+  state.answered = false
+  state.selectedChoice = null
+}
+
 export function resetVoyageProgress(state: SolarState): void {
   state.phase = 'briefing'
   state.planetIndex = 0
   state.score = 0
   state.streak = 0
-  state.scannedHotspots = []
-  state.answered = false
-  state.selectedChoice = null
+  resetMissionProgress(state)
 }
 
 export function resetPlanetProgress(state: SolarState, index: number): void {
   state.phase = 'briefing'
   state.planetIndex = index
-  state.scannedHotspots = []
-  state.answered = false
-  state.selectedChoice = null
+  resetMissionProgress(state)
 }
 
 export function nextPlanetIndex(currentIndex: number, missionCount: number): number | null {
   const nextIndex = currentIndex + 1
   return nextIndex >= missionCount ? null : nextIndex
-}
-
-export function shouldHandleStagePhase(phase: Phase): boolean {
-  return phase === 'explore'
 }

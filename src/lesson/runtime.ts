@@ -53,8 +53,7 @@ export class SolarGameRuntime {
   private warmupComplete = false
   private fatalError = ''
   private hoverHotspotId = ''
-  private autoAdvanceTimer = 0
-  private warpTimer = 0
+  private transitionTimer = 0
   private onReadyToken = 0
   private pointerState = createLessonPointerState()
   private arcadeMode: ArcadeMode | null = null
@@ -114,8 +113,7 @@ export class SolarGameRuntime {
   }
 
   render() {
-    renderUI(this.ui, this.ctx.state, this.missions, this.fatalError)
-    this.syncHotspots()
+    this.renderState()
 
     if (
       this.lastRenderedPlanetIndex >= 0
@@ -253,7 +251,7 @@ export class SolarGameRuntime {
 
     this.ctx.state.answered = true
     this.ctx.state.selectedChoice = getCorrectChoiceId(mission)
-    this.commitState({ syncHotspots: false })
+    this.commitState(false)
   }
 
   private revealAllHotspots() {
@@ -262,8 +260,7 @@ export class SolarGameRuntime {
 
     revealAllHotspots(this.ctx.state, mission)
     this.hoverHotspotId = ''
-    this.setPhase('puzzle')
-    emitPuzzleUnlocked(this.ctx, mission)
+    this.unlockPuzzle(mission)
   }
 
   private revealHotspot(value: string) {
@@ -281,8 +278,7 @@ export class SolarGameRuntime {
     })
 
     if (this.ctx.state.scannedHotspots.length >= mission.hotspots.length) {
-      this.setPhase('puzzle')
-      emitPuzzleUnlocked(this.ctx, mission)
+      this.unlockPuzzle(mission)
       return
     }
 
@@ -302,33 +298,23 @@ export class SolarGameRuntime {
       score: this.ctx.state.score,
     })
 
-    this.commitState({ syncHotspots: false })
-    this.autoAdvanceTimer = window.setTimeout(() => this.advanceAfterPuzzle(), 2200)
+    this.commitState(false)
+    this.scheduleTransition(() => this.advanceAfterPuzzle(), 2200)
   }
 
   private advanceAfterPuzzle() {
-    this.clearAutoAdvanceTimer()
-
-    const nextIndex = nextPlanetIndex(this.ctx.state.planetIndex, this.missions.length)
-    if (nextIndex === null) {
-      this.finish('completed')
-      return
-    }
+    this.clearTransitionTimer()
+    const nextIndex = this.resolveNextPlanetIndex()
+    if (nextIndex === null) return
 
     this.setPhase('warp')
-    this.warpTimer = window.setTimeout(() => this.completeWarp(), 1200)
+    this.scheduleTransition(() => this.enterPlanet(nextIndex, true), 1200)
   }
 
   private completeWarp() {
-    this.clearWarpTimer()
-
-    const nextIndex = nextPlanetIndex(this.ctx.state.planetIndex, this.missions.length)
-    if (nextIndex === null) {
-      this.finish('completed')
-      return
-    }
-
-    this.enterPlanet(nextIndex, true)
+    this.clearTransitionTimer()
+    const nextIndex = this.resolveNextPlanetIndex()
+    if (nextIndex !== null) this.enterPlanet(nextIndex, true)
   }
 
   private enterPlanet(index: number, animate: boolean) {
@@ -394,7 +380,7 @@ export class SolarGameRuntime {
     this.music.warm()
 
     this.onReadyToken += 1
-    this.updateUI()
+    this.renderState(false)
     emitGameStarted(this.ctx, this.missions.length)
 
     const readyToken = this.onReadyToken
@@ -418,7 +404,7 @@ export class SolarGameRuntime {
       })
       .catch((error) => {
         this.fatalError = error instanceof Error ? error.message : String(error)
-        this.updateUI()
+        this.renderState(false)
       })
   }
 
@@ -444,7 +430,7 @@ export class SolarGameRuntime {
 
     if (field === 'score') {
       this.ctx.state.score = Number(value) || 0
-      this.commitState({ syncHotspots: false })
+      this.commitState(false)
       return
     }
 
@@ -456,8 +442,9 @@ export class SolarGameRuntime {
     }
   }
 
-  private updateUI() {
+  private renderState(syncHotspots = true) {
     renderUI(this.ui, this.ctx.state, this.missions, this.fatalError)
+    if (syncHotspots) this.syncHotspots()
   }
 
   private syncHotspots() {
@@ -468,11 +455,22 @@ export class SolarGameRuntime {
     )
   }
 
-  private commitState(options: { syncHotspots?: boolean } = {}) {
-    const { syncHotspots = true } = options
-    this.updateUI()
-    if (syncHotspots) this.syncHotspots()
+  private commitState(syncHotspots = true) {
+    this.renderState(syncHotspots)
     this.ctx.sync()
+  }
+
+  private unlockPuzzle(mission: PlanetMission) {
+    this.setPhase('puzzle')
+    emitPuzzleUnlocked(this.ctx, mission)
+  }
+
+  private resolveNextPlanetIndex() {
+    const nextIndex = nextPlanetIndex(this.ctx.state.planetIndex, this.missions.length)
+    if (nextIndex !== null) return nextIndex
+
+    this.finish('completed')
+    return null
   }
 
   private activateAudio() {
@@ -499,18 +497,17 @@ export class SolarGameRuntime {
   }
 
   private clearTimers() {
-    this.clearAutoAdvanceTimer()
-    this.clearWarpTimer()
+    this.clearTransitionTimer()
   }
 
-  private clearAutoAdvanceTimer() {
-    clearTimeout(this.autoAdvanceTimer)
-    this.autoAdvanceTimer = 0
+  private scheduleTransition(callback: () => void, delayMs: number) {
+    this.clearTransitionTimer()
+    this.transitionTimer = window.setTimeout(callback, delayMs)
   }
 
-  private clearWarpTimer() {
-    clearTimeout(this.warpTimer)
-    this.warpTimer = 0
+  private clearTransitionTimer() {
+    clearTimeout(this.transitionTimer)
+    this.transitionTimer = 0
   }
 
   private readonly handleUiClick = (event: MouseEvent) => {
