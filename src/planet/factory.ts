@@ -1,27 +1,28 @@
 import {
-  AdditiveBlending,
-
-  Color,
-  DoubleSide,
   Group,
   type Material,
   Mesh,
-
-  MeshPhongMaterial,
-  MeshPhysicalMaterial,
-  MeshStandardMaterial,
   RingGeometry,
   type Scene,
   SphereGeometry,
   Sprite,
-  SpriteMaterial,
-  Vector2,
   Vector3,
   type Texture,
 } from 'three/webgpu'
 import { createCloudTexture, createPlanetTexture, createRingTexture, getGlowTexture } from './procedural-textures'
 import type { RockyTextureSet } from './procedural-textures'
 import type { LoadedTextures, PlanetMission, PlanetVisual } from '../types'
+import {
+  createAtmosphereMaterial,
+  createCloudMaterial,
+  createEarthSurfaceMaterial as createEarthSurfaceNodeMaterial,
+  createGlowSpriteMaterial,
+  createHotspotMaterial,
+  createMoonMaterial,
+  createPlaceholderSurfaceMaterial,
+  createPlanetSurfaceMaterial,
+  createRingMaterial,
+} from '../scene/webgpu-materials'
 
 const GAS_GIANTS = new Set(['jupiter', 'saturn', 'uranus', 'neptune'])
 const CLOUD_PLANETS = new Set(['venus', 'jupiter', 'saturn', 'uranus', 'neptune'])
@@ -31,17 +32,6 @@ const CLOUD_ACCENT: Record<string, string> = {
   uranus: '#f2ffff',
   neptune: '#d1e6ff',
   venus: '#fff4cf',
-}
-
-const PLACEHOLDER_COLOR: Record<string, string> = {
-  mercury: '#726454',
-  venus: '#a95f24',
-  earth: '#2a5caa',
-  mars: '#8b3b27',
-  jupiter: '#a36f46',
-  saturn: '#b29a76',
-  uranus: '#9ce4ea',
-  neptune: '#235bcb',
 }
 
 function latLonToVector(radius: number, lat: number, lon: number): Vector3 {
@@ -77,14 +67,15 @@ export function buildAllPlanets(
     // Placeholder surface — solid color, replaced once worker textures arrive
     const surface = new Mesh(
       new SphereGeometry(mission.radius, 96, 96),
-      new MeshStandardMaterial({
-        color: PLACEHOLDER_COLOR[mission.visualKind] || '#666666',
-        roughness: 0.76, metalness: 0.03,
-      }),
+      createPlaceholderSurfaceMaterial(mission),
     )
     bodyGroup.add(surface)
 
-    const atmosphere = undefined
+    const atmosphere = new Mesh(
+      new SphereGeometry(mission.radius * (GAS_GIANTS.has(mission.visualKind) ? 1.03 : 1.06), 72, 72),
+      createAtmosphereMaterial(mission),
+    )
+    bodyGroup.add(atmosphere)
 
     const hotspotMap = new Map<string, Mesh>()
     for (const hotspot of mission.hotspots) {
@@ -153,50 +144,12 @@ function createSurfaceMesh(
   textures: LoadedTextures | null,
 ): Mesh {
   const geometry = new SphereGeometry(mission.radius, 96, 96)
-  const kind = mission.visualKind
   const surfaceMap = getOfficialPlanetMap(mission, textures) ?? generated.map
-
-  if (kind === 'venus') {
-    return new Mesh(geometry, new MeshPhysicalMaterial({
-      color: new Color().setRGB(1.08, 1.05, 1.02),
-      map: surfaceMap,
-      bumpMap: generated.bumpMap, bumpScale: mission.radius * 0.03,
-      roughnessMap: generated.roughnessMap, roughness: 0.64, metalness: 0.02,
-      clearcoat: 0.7, clearcoatRoughness: 0.1,
-    }))
-  }
-
-  if (GAS_GIANTS.has(kind)) {
-    return new Mesh(geometry, new MeshStandardMaterial({
-      color: new Color().setRGB(1.08, 1.08, 1.06),
-      map: surfaceMap,
-      bumpMap: generated.bumpMap, bumpScale: mission.radius * 0.018,
-      roughnessMap: generated.roughnessMap,
-      roughness: kind === 'saturn' ? 0.52 : 0.48,
-      metalness: 0.02,
-    }))
-  }
-
-  return new Mesh(geometry, new MeshStandardMaterial({
-    color: new Color().setRGB(1.08, 1.08, 1.08),
-    map: surfaceMap,
-    bumpMap: generated.bumpMap,
-    bumpScale: mission.radius * (kind === 'mercury' ? 0.1 : 0.08),
-    roughnessMap: generated.roughnessMap, roughness: 0.72, metalness: 0.03,
-  }))
+  return new Mesh(geometry, createPlanetSurfaceMaterial(mission, generated, surfaceMap))
 }
 
-export function createEarthSurfaceMaterial(textures: LoadedTextures): MeshPhongMaterial {
-  return new MeshPhongMaterial({
-    color: new Color().setRGB(1.07, 1.07, 1.07),
-    map: textures.earthDay,
-    normalMap: textures.earthNormal,
-    emissiveMap: textures.earthLights,
-    emissive: new Color('#285ca1'), emissiveIntensity: 0.65,
-    shininess: 34, specular: new Color('#b6dbff'),
-    specularMap: textures.earthSpecular,
-    normalScale: new Vector2(1.15, 1.15),
-  })
+export function createEarthSurfaceMaterial(textures: LoadedTextures) {
+  return createEarthSurfaceNodeMaterial(textures)
 }
 
 export function getOfficialPlanetMap(mission: PlanetMission, textures: LoadedTextures | null): Texture | null {
@@ -216,14 +169,10 @@ export function getOfficialPlanetMap(mission: PlanetMission, textures: LoadedTex
 
 export async function createCloudLayer(mission: PlanetMission, textures: LoadedTextures | null): Promise<Mesh | null> {
   if (mission.visualKind === 'earth' && textures) {
+    if (!textures.earthClouds) return null
     return new Mesh(
       new SphereGeometry(mission.radius * 1.018, 72, 72),
-      new MeshPhongMaterial({
-        color: new Color().setRGB(1.08, 1.08, 1.08),
-        map: textures.earthClouds, alphaMap: textures.earthClouds,
-        transparent: true, opacity: 0.72, depthWrite: false,
-        shininess: 38, specular: new Color('#eef6ff'),
-      }),
+      createCloudMaterial(textures.earthClouds, '#eef6ff', 0.72),
     )
   }
   if (!CLOUD_PLANETS.has(mission.visualKind)) return null
@@ -239,12 +188,7 @@ async function createCloudLayerFromTexture(mission: PlanetMission): Promise<Mesh
 
   return new Mesh(
     new SphereGeometry(mission.radius * 1.02, 72, 72),
-    new MeshPhongMaterial({
-      color: new Color().setRGB(1.06, 1.06, 1.06),
-      map: clouds.map, alphaMap: clouds.map,
-      transparent: true, opacity, depthWrite: false,
-      shininess: 26, specular: new Color(accent),
-    }),
+    createCloudMaterial(clouds.map, accent, opacity),
   )
 }
 
@@ -267,10 +211,7 @@ async function createRing(mission: PlanetMission): Promise<Mesh> {
 
   const mesh = new Mesh(
     geometry,
-    new MeshPhongMaterial({
-      map: texture, alphaMap: texture, transparent: true,
-      opacity: isSaturn ? 0.95 : 0.42, side: DoubleSide, depthWrite: false,
-    }),
+    createRingMaterial(texture, mission.ringColor || '#ffffff', isSaturn ? 0.95 : 0.42),
   )
   mesh.rotation.x = Math.PI / 2
   return mesh
@@ -284,9 +225,10 @@ function createMoons(mission: PlanetMission, anchor: Group, textures: LoadedText
   for (let i = 0; i < count; i += 1) {
     const pivot = new Group()
     const moonRadius = mission.radius * (mission.moonScale || 0.16) * (1 - i * 0.12)
-    const material = mission.visualKind === 'earth' && textures?.moon
-      ? new MeshStandardMaterial({ map: textures.moon, roughness: 1, metalness: 0.02 })
-      : new MeshStandardMaterial({ color: i % 2 === 0 ? '#d1c1aa' : '#8b9aba', roughness: 1, metalness: 0.01 })
+    const material = createMoonMaterial(
+      mission.visualKind === 'earth' ? textures?.moon ?? null : null,
+      i % 2 === 0 ? '#d1c1aa' : '#8b9aba',
+    )
     const moon = new Mesh(new SphereGeometry(moonRadius, 32, 32), material)
     moon.position.x = (mission.moonOrbitRadius || mission.radius * 2.6) + i * moonRadius * 2.7
     pivot.add(moon)
@@ -299,18 +241,12 @@ function createMoons(mission: PlanetMission, anchor: Group, textures: LoadedText
 function createHotspot(mission: PlanetMission, hotspotId: string, color: string): Mesh {
   const marker = new Mesh(
     new SphereGeometry(Math.max(0.12, mission.radius * 0.075), 20, 20),
-    new MeshStandardMaterial({
-      color, emissive: new Color(color), emissiveIntensity: 1.4,
-      roughness: 0.2, metalness: 0.08,
-    }),
+    createHotspotMaterial(color),
   )
   marker.userData.hotspotId = hotspotId
 
   const glow = new Sprite(
-    new SpriteMaterial({
-      map: getGlowTexture(color), color,
-      blending: AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.75,
-    }),
+    createGlowSpriteMaterial(getGlowTexture(color), color, 0.75),
   )
   glow.scale.setScalar(Math.max(0.6, mission.radius * 0.55))
   marker.add(glow)

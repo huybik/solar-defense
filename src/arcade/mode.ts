@@ -8,7 +8,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
-import { pass } from 'three/tsl'
+import { float, pass, saturation, screenUV, smoothstep } from 'three/tsl'
 import type { GameBridge } from '@learnfun/game-sdk'
 import { Arena } from './combat/arena'
 import { BackgroundController } from './render/background'
@@ -96,8 +96,10 @@ export class ArcadeMode {
     const scenePass = pass(this.scene, this.camera)
     const sceneColor = scenePass.getTextureNode('output')
     const bloomPass = bloom(sceneColor, 0.35, 0.15, 0.6)
+    const graded = saturation(sceneColor.add(bloomPass), 1.08)
+    const vignette = float(1).sub(smoothstep(float(0.28), float(0.92), screenUV.sub(0.5).length()).mul(0.18))
     this.postProcessing = new PostProcessing(this.renderer)
-    this.postProcessing.outputNode = sceneColor.add(bloomPass)
+    this.postProcessing.outputNode = graded.mul(vignette)
     this.postProcessing.needsUpdate = true
 
     this.hud = new ArcadeHUD(uiContainer)

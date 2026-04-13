@@ -1,7 +1,6 @@
 import {
   AdditiveBlending,
   AmbientLight,
-  BackSide,
   BufferGeometry,
   Color,
   Float32BufferAttribute,
@@ -17,27 +16,25 @@ import {
   Object3D,
   PointLight,
   Points,
-  PointsMaterial,
   type Scene,
   SphereGeometry,
   Sprite,
-  SpriteMaterial,
 } from 'three/webgpu'
 import { createNebulaTexture, createSunTexture, getGlowTexture } from '../planet/procedural-textures'
 import type { PlanetMission } from '../types'
+import {
+  createGlowSpriteMaterial,
+  createNebulaMaterial,
+  createStarfieldMaterial,
+  createSunMaterial,
+} from './webgpu-materials'
 
 export async function buildEnvironment(scene: Scene, missions: PlanetMission[]): Promise<Object3D[]> {
   const objects: Object3D[] = []
 
   const nebula = new Mesh(
     new SphereGeometry(720, 64, 64),
-    new MeshBasicMaterial({
-      map: createNebulaTexture('nebula'),
-      color: new Color('#bcc9d8'),
-      transparent: true,
-      opacity: 0.18,
-      side: BackSide,
-    }),
+    createNebulaMaterial(createNebulaTexture('nebula')),
   )
   scene.add(nebula)
   objects.push(nebula)
@@ -64,28 +61,14 @@ export async function buildEnvironment(scene: Scene, missions: PlanetMission[]):
   const sunTexture = await createSunTexture('sun')
   const sun = new Mesh(
     new SphereGeometry(3, 80, 80),
-    new MeshBasicMaterial({ map: sunTexture, color: new Color('#ffcf59') }),
+    createSunMaterial(sunTexture),
   )
   const innerGlow = new Sprite(
-    new SpriteMaterial({
-      map: getGlowTexture('#ffdf92'),
-      color: '#ffcf70',
-      blending: AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0.95,
-    }),
+    createGlowSpriteMaterial(getGlowTexture('#ffdf92'), '#ffcf70', 0.95),
   )
   innerGlow.scale.setScalar(9)
   const outerGlow = new Sprite(
-    new SpriteMaterial({
-      map: getGlowTexture('#ff7a1f'),
-      color: '#ff9840',
-      blending: AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0.4,
-    }),
+    createGlowSpriteMaterial(getGlowTexture('#ff7a1f'), '#ff9840', 0.4),
   )
   outerGlow.scale.setScalar(15)
   sunGroup.add(outerGlow, innerGlow, sun)
@@ -155,8 +138,5 @@ function createStarfield(count: number, minRadius: number, maxRadius: number, si
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
   geometry.setAttribute('color', new Float32BufferAttribute(colors, 3))
-  return new Points(geometry, new PointsMaterial({
-    size, transparent: true, opacity: 0.6,
-    sizeAttenuation: true, vertexColors: true, depthWrite: false,
-  }))
+  return new Points(geometry, createStarfieldMaterial(size))
 }

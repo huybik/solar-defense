@@ -1,13 +1,15 @@
 import {
   Mesh,
-  MeshPhongMaterial,
-  MeshPhysicalMaterial,
-  MeshStandardMaterial,
   SRGBColorSpace,
   TextureLoader,
   type Material,
 } from 'three/webgpu'
-import { createCloudLayer, createEarthSurfaceMaterial, getOfficialPlanetMap } from './factory'
+import {
+  createCloudLayer,
+  createEarthSurfaceMaterial,
+  getOfficialPlanetMap,
+} from './factory'
+import { createMoonMaterial } from '../scene/webgpu-materials'
 import type { LoadedTextures, PlanetVisual } from '../types'
 
 export async function loadNasaTextures(): Promise<LoadedTextures> {
@@ -69,7 +71,7 @@ export async function applyNasaTextures(visuals: Map<string, PlanetVisual>, text
           const moonMesh = pivot.children[0]
           if (!(moonMesh instanceof Mesh)) continue
           disposeMaterial(moonMesh.material)
-          moonMesh.material = new MeshStandardMaterial({ map: textures.moon, roughness: 1, metalness: 0.02 })
+          moonMesh.material = createMoonMaterial(textures.moon, '#d1c1aa')
         }
       }
       continue
@@ -78,8 +80,8 @@ export async function applyNasaTextures(visuals: Map<string, PlanetVisual>, text
     const officialMap = getOfficialPlanetMap(visual.mission, textures)
     if (!officialMap) continue
     const material = Array.isArray(visual.surface.material) ? visual.surface.material[0] : visual.surface.material
-    if (material instanceof MeshStandardMaterial || material instanceof MeshPhysicalMaterial || material instanceof MeshPhongMaterial) {
-      material.map = officialMap
+    if (material && 'map' in material) {
+      ;(material as Material & { map?: unknown }).map = officialMap
       material.needsUpdate = true
     }
   }

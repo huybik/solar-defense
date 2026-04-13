@@ -1,16 +1,13 @@
 type Disposable = { dispose(): void }
 
-type DisposableMaterial =
-  | ({ dispose?: () => void; map?: Disposable | null } & Record<string, unknown>)
-  | null
-  | undefined
+type DisposableMaterial = ({ dispose?: () => void; map?: Disposable | null } | null | undefined)
 
-type DisposableGeometry = Disposable | null | undefined
+type DisposableGeometry = { dispose?: () => void } | null | undefined
 
 type DisposableObject = {
   removeFromParent(): void
   geometry?: DisposableGeometry
-  material?: DisposableMaterial | DisposableMaterial[]
+  material?: unknown
 }
 
 const DISPOSAL_DELAY_FLUSHES = 3
@@ -28,8 +25,9 @@ function disposeMaterial(material: DisposableMaterial | DisposableMaterial[], di
   }
 
   if (!material) return
-  if (disposeMap && material.map && typeof material.map.dispose === 'function') {
-    material.map.dispose()
+  const map = material.map as Disposable | null | undefined
+  if (disposeMap && map && typeof map.dispose === 'function') {
+    map.dispose()
   }
   if (typeof material.dispose === 'function') {
     material.dispose()
@@ -54,7 +52,7 @@ export function removeAndDisposeObjectLater(
     if (disposeGeometry && object.geometry && typeof object.geometry.dispose === 'function') {
       object.geometry.dispose()
     }
-    disposeMaterial(object.material, disposeMap)
+    disposeMaterial(object.material as DisposableMaterial | DisposableMaterial[], disposeMap)
   })
 }
 

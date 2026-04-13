@@ -1,5 +1,29 @@
 declare module 'three/webgpu' {
+  import type {
+    Material,
+    MeshBasicMaterial,
+    MeshPhysicalMaterial,
+    MeshStandardMaterial,
+    PointsMaterial,
+    SpriteMaterial,
+  } from 'three'
+
   export * from 'three'
+  export class MeshBasicNodeMaterial extends MeshBasicMaterial {
+    [key: string]: any
+  }
+  export class MeshStandardNodeMaterial extends MeshStandardMaterial {
+    [key: string]: any
+  }
+  export class MeshPhysicalNodeMaterial extends MeshPhysicalMaterial {
+    [key: string]: any
+  }
+  export class SpriteNodeMaterial extends SpriteMaterial {
+    [key: string]: any
+  }
+  export class PointsNodeMaterial extends PointsMaterial {
+    [key: string]: any
+  }
   export class PostProcessing {
     constructor(renderer: any)
     outputNode: any
@@ -26,6 +50,23 @@ declare module 'three/webgpu' {
 
 declare module 'three/tsl' {
   export function pass(scene: any, camera: any): any
+  export const cameraPosition: any
+  export const color: any
+  export const float: any
+  export const mix: any
+  export const normalMap: any
+  export const normalWorld: any
+  export const positionLocal: any
+  export const positionWorld: any
+  export const saturation: any
+  export const screenUV: any
+  export const smoothstep: any
+  export const texture: any
+  export const time: any
+  export const uniform: any
+  export const uv: any
+  export const vec2: any
+  export const vertexColor: any
 }
 
 declare module 'three/addons/controls/OrbitControls.js' {

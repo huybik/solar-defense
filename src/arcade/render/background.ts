@@ -3,10 +3,12 @@ import {
   Color,
   Group,
   Mesh,
+  MeshBasicNodeMaterial,
   MeshBasicMaterial,
   PlaneGeometry,
   RepeatWrapping,
 } from 'three/webgpu'
+import { float, texture, uniform, uv, vec2 } from 'three/tsl'
 import { ARENA, type BackgroundPalette, type PlanetId } from '../types'
 import { cloneTexture } from './sprites'
 import { removeAndDisposeObjectLater } from './deferred-dispose'
@@ -33,6 +35,7 @@ export class BackgroundController {
   private flashOpacity = 0
   private bossDarken = false
   private bossDarkenT = 0
+  private readonly planetScroll = uniform(0)
 
   constructor(planetId: PlanetId) {
     this.palette = BACKGROUND_PALETTES[planetId]
@@ -62,10 +65,7 @@ export class BackgroundController {
   }
 
   update(delta: number, hazardTint = 0): void {
-    const mat = this.planetMesh.material as MeshBasicMaterial
-    if (mat.map) {
-      mat.map.offset.x += this.palette.scroll[1] * delta
-    }
+    this.planetScroll.value += this.palette.scroll[1] * delta
 
     this.updateFlash(delta)
     this.updateBossDarken(delta)
@@ -94,22 +94,29 @@ export class BackgroundController {
   }
 
   private createPlanetLayer(key: string): Mesh {
-    const texture = cloneTexture(key)
-    texture.wrapS = RepeatWrapping
-    texture.wrapT = RepeatWrapping
-    texture.rotation = Math.PI / 2
-    texture.center.set(0.5, 0.5)
-    texture.repeat.set(1.8, 1.18)
+    const layerTexture = cloneTexture(key)
+    layerTexture.wrapS = RepeatWrapping
+    layerTexture.wrapT = RepeatWrapping
+    layerTexture.rotation = Math.PI / 2
+    layerTexture.center.set(0.5, 0.5)
+    layerTexture.repeat.set(1.8, 1.18)
+
+    const material = new MeshBasicNodeMaterial()
+    const planetSample = texture(
+      layerTexture,
+      uv().add(vec2(this.planetScroll, float(0))),
+    ).setUpdateMatrix(true)
+
+    material.map = layerTexture
+    material.colorNode = planetSample.rgb
+    material.opacityNode = float(0.4)
+    material.transparent = true
+    material.toneMapped = false
 
     const mesh = new Mesh(
       new PlaneGeometry(ARENA.WIDTH * 3.5, ARENA.HEIGHT * 2.8),
-      new MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 0.4,
-      }),
+      material,
     )
-      ; (mesh.material as MeshBasicMaterial).toneMapped = false
     return mesh
   }
 
@@ -125,7 +132,7 @@ export class BackgroundController {
     if (Math.abs(this.bossDarkenT - target) < 0.001) { this.bossDarkenT = target; return }
     this.bossDarkenT += (target - this.bossDarkenT) * Math.min(1, delta * 2.5)
     const darken = 1 - this.bossDarkenT * 0.4
-      ; (this.planetMesh.material as MeshBasicMaterial).opacity = 0.4 * darken
+      ; (this.planetMesh.material as MeshBasicNodeMaterial).opacityNode = float(0.4 * darken)
   }
 
   private disposeMesh(mesh: Mesh, disposeMap = false): void {

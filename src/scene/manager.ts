@@ -1,7 +1,6 @@
 import {
   ACESFilmicToneMapping,
   Color,
-  Mesh,
   MOUSE,
   PerspectiveCamera,
   PostProcessing,
@@ -14,7 +13,7 @@ import {
 } from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
-import { pass } from 'three/tsl'
+import { float, pass, saturation, screenUV, smoothstep } from 'three/tsl'
 import { buildEnvironment } from './environment'
 import { buildAllPlanets, streamProceduralTextures } from '../planet/factory'
 import { applyNasaTextures, loadNasaTextures } from '../planet/nasa-textures'
@@ -31,6 +30,7 @@ export class SceneManager {
 
   private textures: LoadedTextures | null = null
   private textureLoadPromise: Promise<void> | null = null
+  private textureLoadToken = 0
   private raycaster = new Raycaster()
   private pointer = new Vector2()
 
@@ -80,7 +80,7 @@ export class SceneManager {
 
     // Stream procedural + NASA textures in background — planets pop in as they finish
     streamProceduralTextures(this.visuals, () => this.textures)
-    this.loadTexturesInBackground()
+    this.loadTexturesInBackground(++this.textureLoadToken)
   }
 
   animate(delta: number, elapsed: number) {
@@ -150,10 +150,25 @@ export class SceneManager {
   }
 
   dispose() {
+    this.textureLoadToken += 1
     this.controls?.dispose()
     this.postProcessing?.dispose()
     this.renderer?.setAnimationLoop(null)
+    this.disposeSceneGraph()
     this.renderer?.dispose()
+    this.controls = null
+    this.postProcessing = null
+    this.renderer = null
+    this.scene = null
+    this.camera = null
+    this.visuals.clear()
+    if (this.textures) {
+      for (const texture of Object.values(this.textures)) {
+        texture?.dispose()
+      }
+    }
+    this.textures = null
+    this.textureLoadPromise = null
   }
 
   private buildPostProcessing() {
@@ -161,15 +176,23 @@ export class SceneManager {
     const scenePass = pass(this.scene, this.camera)
     const sceneColor = scenePass.getTextureNode('output')
     const bloomPass = bloom(sceneColor, 0.44, 0.18, 0.68)
+    const graded = saturation(sceneColor.add(bloomPass), 1.04)
+    const vignette = float(1).sub(smoothstep(float(0.3), float(0.92), screenUV.sub(0.5).length()).mul(0.22))
     this.postProcessing = new PostProcessing(this.renderer)
-    this.postProcessing.outputNode = sceneColor.add(bloomPass)
+    this.postProcessing.outputNode = graded.mul(vignette)
     this.postProcessing.needsUpdate = true
   }
 
-  private loadTexturesInBackground() {
+  private loadTexturesInBackground(loadToken: number) {
     if (this.textures || this.textureLoadPromise) return
     this.textureLoadPromise = loadNasaTextures()
       .then((textures) => {
+        if (loadToken !== this.textureLoadToken) {
+          for (const texture of Object.values(textures)) {
+            texture?.dispose()
+          }
+          return
+        }
         this.textures = textures
         applyNasaTextures(this.visuals, textures)
       })
@@ -179,5 +202,45 @@ export class SceneManager {
       .finally(() => {
         this.textureLoadPromise = null
       })
+  }
+
+  private disposeSceneGraph() {
+    if (!this.scene) return
+
+    const geometries = new Set<{ dispose(): void }>()
+    const materials = new Set<Record<string, unknown> & { dispose(): void }>()
+    const textures = new Set<{ dispose(): void }>()
+    const materialTextureKeys = [
+      'map',
+      'alphaMap',
+      'bumpMap',
+      'normalMap',
+      'roughnessMap',
+      'metalnessMap',
+      'emissiveMap',
+      'specularMap',
+    ]
+
+    this.scene.traverse((object: any) => {
+      if (object.geometry?.dispose) {
+        geometries.add(object.geometry)
+      }
+
+      const materialList = Array.isArray(object.material) ? object.material : [object.material]
+      for (const material of materialList) {
+        if (!material?.dispose) continue
+        materials.add(material)
+        for (const key of materialTextureKeys) {
+          const texture = material[key]
+          if (texture?.dispose) {
+            textures.add(texture)
+          }
+        }
+      }
+    })
+
+    for (const geometry of geometries) geometry.dispose()
+    for (const material of materials) material.dispose()
+    for (const texture of textures) texture.dispose()
   }
 }

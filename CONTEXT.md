@@ -45,7 +45,7 @@ Shared background music now covers the full game loop: cinematic, lesson phases,
 ### `src/planet/` — planet data & rendering
 - `data.ts`: default missions data plus `buildMissions()` composition
 - `mission-overrides.ts`: pure mission override parsing/merging helpers
-- `factory.ts`: planet mesh creation (surface, atmosphere, clouds, rings, moons, hotspots)
+- `factory.ts`: planet mesh creation (placeholder surfaces, TSL/node-material surfaces, atmosphere shells, clouds, rings, moons, hotspots)
 - `nasa-textures.ts`: async NASA texture loading and hot-swap onto procedural planets
 - `procedural-textures.ts`: generated textures for planets, rings, nebulae, glows, sun, and glow cache
 
@@ -53,6 +53,7 @@ Shared background music now covers the full game loop: cinematic, lesson phases,
 - `manager.ts`: SceneManager — renderer/camera/controls setup, animation loop, hotspot raycasting, post-processing
 - `camera.ts`: camera transitions and planet-tracking follow system
 - `environment.ts`: starfield, nebula backdrop, sun with glow, orbit lines, asteroid belt
+- `webgpu-materials.ts`: shared TSL/node material builders for planets, atmospheres, glows, starfields, and other WebGPU-first scene visuals
 
 ### `src/ui/` — DOM rendering
 - `shell.ts`: buildShell (DOM structure), UIElements interface
@@ -131,13 +132,17 @@ On touch-primary devices (`pointer: coarse`), Touhou-style drag-to-move input re
 ## Visual System
 
 - WebGPU-only renderer with bloom post-processing
+- Core presentation is now TSL/node-material driven: planets, Earth night lights, atmosphere shells, cloud layers, rings, starfield points, sun/glow sprites, hotspot glows, and the arcade backdrop all use WebGPU-first node materials instead of only legacy Phong/Basic materials
 - Official NASA diffuse textures are vendored for Earth, Moon, Venus, Mars, Jupiter, Saturn, Neptune, plus Mercury/Uranus extracted from official NASA GLBs
 - Scene boots with lighter procedural textures first, then swaps in the official NASA diffuse maps asynchronously to reduce startup latency
 - Focus camera continuously tracks the active planet as it moves along its orbit
 - Other planets are procedural with layered maps: diffuse + bump + roughness + emissive where useful, plus cloud layers, atmosphere shells, and rings
 - Scene includes sun glow, orbit ribbons, asteroid belt, starfield, nebula sphere, and animated moons
+- Post-processing now adds a light saturation/vignette grade on top of bloom for both lesson and arcade scenes
 - Arcade mode: fixed camera locked on planet, gameplay on a 42×60 arena plane with DOM command-center HUD overlays
 - Command-center title/map/briefing phases now render a planet backdrop too, so new campaigns no longer sit on an empty black canvas between fights
+- Arcade backdrop planet scrolling now happens in shader space instead of mutating texture offsets on the CPU each frame
 - Missile exhaust now uses pooled point-trail VFX so authored `trailColor` values render without per-missile trail mesh churn
 - Arcade combat teardown now defers sprite/material/geometry disposal until after render, side-entry enemies spawn fully offscreen again, and empty VFX point clouds hide instead of issuing WebGPU zero-vertex draw warnings
 - Deferred arcade disposals now age across multiple render flushes and only force-drain on full runtime teardown, which avoids WebGPU destroyed-texture warnings during menu/combat scene swaps
+- Lesson scene teardown now also disposes scene graph materials/textures and ignores late async NASA texture results after dispose so renderer resets do not leak WebGPU resources
