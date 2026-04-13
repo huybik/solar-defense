@@ -44,6 +44,7 @@ const DIFFICULTIES = ['easy', 'normal', 'hard', 'impossible', 'suicide'] as cons
 export class ArcadeHUD {
   private readonly root: HTMLDivElement
   private lastPhase = ''
+  private lastCombatPaused = false
   private lastMarkup = ''
   private callback: ActionCallback | null = null
   private combatEls = new Map<string, HTMLElement | null>()
@@ -63,8 +64,10 @@ export class ArcadeHUD {
     const phaseChanged = view.state.phase !== this.lastPhase
 
     if (view.state.phase === 'combat') {
-      if (phaseChanged) {
+      const pausedChanged = view.state.paused !== this.lastCombatPaused
+      if (phaseChanged || pausedChanged) {
         this.lastPhase = view.state.phase
+        this.lastCombatPaused = view.state.paused
         this.commitMarkup(this.render(view), true)
       }
       this.updateCombat(view)
@@ -72,6 +75,7 @@ export class ArcadeHUD {
     }
 
     this.lastPhase = view.state.phase
+    this.lastCombatPaused = false
     this.commitMarkup(this.render(view), phaseChanged)
   }
 
@@ -196,7 +200,7 @@ export class ArcadeHUD {
           <p class="arc-copy">Eight episodes. Shops between sorties. Secret routes if you know where to look.</p>
           <div class="arc-difficulty-row">${difficultyRow}</div>
           <p class="arc-controls-note">${isTouchDevice()
-            ? 'Drag anywhere to move. Auto-fire is always on. Use the BOMB and SP buttons during combat.'
+            ? 'Drag anywhere to move. Auto-fire is always on. Use the BOMB, SP, and pause buttons during combat.'
             : 'P1: WASD or Arrows move, E use special, Q cycle, Space/F MegaBomb. Press P during combat to bring P2 online. After joining, P2 uses IJKL move, O use special, U cycle, P MegaBomb, or the first connected gamepad. Esc pauses.'
           }</p>
           <div class="arc-slot-grid">${slots}</div>
@@ -325,6 +329,26 @@ export class ArcadeHUD {
 
   private renderCombat(view: ArcadeViewModel): string {
     const state = view.state
+    const pauseOverlay = state.paused
+      ? `
+        <div class="arc-screen arc-pause-screen" data-action="pause_overlay">
+          <div class="arc-screen-inner">
+            <span class="arc-eyebrow">Combat Paused</span>
+            <h2 class="arc-title">${escapeHtml(state.levelName || 'Mission Hold')}</h2>
+            <p class="arc-copy">${isTouchDevice()
+              ? 'Tap RESUME to continue the sortie, or MAP to abort and return to the campaign screen.'
+              : 'Press Esc or use RESUME to continue the sortie, or MAP to abort and return to the campaign screen.'
+            }</p>
+            <div class="arc-status-message">${escapeHtml(view.message)}</div>
+            <div class="arc-screen-actions">
+              <button class="arc-btn arc-btn-primary" data-action="resume_combat">RESUME</button>
+              <button class="arc-btn arc-btn-secondary" data-action="back_to_map">MAP</button>
+            </div>
+          </div>
+        </div>
+      `
+      : ''
+
     return `
       <div class="arc-combat-shell">
         <div class="arc-combat-top">
@@ -354,6 +378,7 @@ export class ArcadeHUD {
         </div>
         <div class="arc-comms-panel"><p class="arc-comms-text">${escapeHtml(state.comms[0] ?? view.message)}</p></div>
       </div>
+      ${pauseOverlay}
     `
   }
 

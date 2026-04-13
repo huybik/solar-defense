@@ -15,6 +15,7 @@ import type { ArenaSnapshot } from './combat/arena'
 export function createDefaultArcadeState(): ArcadeState {
   return {
     phase: 'title',
+    paused: false,
     mode: 'campaign',
     difficulty: 'normal',
     saveSlot: null,

@@ -46,6 +46,7 @@ export interface DebriefData {
 
 export interface ArcadeState {
   phase: ArcadePhase
+  paused: boolean
   mode: ArcadeRunMode
   difficulty: Difficulty
   saveSlot: number | null

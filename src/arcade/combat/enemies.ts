@@ -184,7 +184,15 @@ export class EnemyManager {
 
   hit(enemy: EnemyEntity, damage: number): HitResult {
     if (!enemy.alive || enemy.cloaked) {
-      return { id: enemy.id, killed: false, score: 0, credits: 0, position: { ...enemy.position }, drops: enemy.def.dropTable }
+      return {
+        id: enemy.id,
+        killed: false,
+        score: 0,
+        credits: 0,
+        position: { ...enemy.position },
+        radius: enemy.radius,
+        drops: enemy.def.dropTable,
+      }
     }
 
     if (enemy.shield > 0) {
@@ -197,7 +205,15 @@ export class EnemyManager {
     }
 
     if (enemy.health > 0) {
-      return { id: enemy.id, killed: false, score: 0, credits: 0, position: { ...enemy.position }, drops: enemy.def.dropTable }
+      return {
+        id: enemy.id,
+        killed: false,
+        score: 0,
+        credits: 0,
+        position: { ...enemy.position },
+        radius: enemy.radius,
+        drops: enemy.def.dropTable,
+      }
     }
 
     const result: HitResult = {
@@ -206,6 +222,7 @@ export class EnemyManager {
       score: enemy.def.score,
       credits: Math.round(enemy.def.credits * this.difficulty.creditMul),
       position: { ...enemy.position },
+      radius: enemy.radius,
       drops: enemy.def.dropTable,
     }
     this.kill(enemy)

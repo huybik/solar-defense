@@ -1033,9 +1033,9 @@ export class Arena {
       this.scoreState.credits += result.credits
     }
     if (kind === 'enemy') {
-      this.vfx.enemyExplosion(result.position.x, result.position.y, colors[kind], 0.9)
+      this.vfx.enemyExplosion(result.position.x, result.position.y, colors[kind], result.radius)
     } else {
-      this.vfx.explosion(result.position.x, result.position.y, colors[kind], 0.8)
+      this.vfx.explosion(result.position.x, result.position.y, colors[kind], Math.max(0.7, result.radius))
     }
     this.audio.explosion()
     this.maybeDrop(result.position, result.drops)

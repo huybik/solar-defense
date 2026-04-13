@@ -84,19 +84,36 @@ export class TerrainManager {
 
   hit(entity: TerrainEntity, damage: number): HitResult {
     if (!entity.alive) {
-      return { id: entity.defId, killed: false, score: 0, credits: 0, position: { ...entity.position }, drops: { credits: [0, 0] } }
+      return {
+        id: entity.defId,
+        killed: false,
+        score: 0,
+        credits: 0,
+        position: { ...entity.position },
+        radius: entity.radius,
+        drops: { credits: [0, 0] },
+      }
     }
     entity.health -= damage
     const def = getTerrainDef(entity.defId)
     if (entity.health > 0) {
-      return { id: entity.defId, killed: false, score: 0, credits: 0, position: { ...entity.position }, drops: def.dropTable ?? { credits: [0, 0] } }
+      return {
+        id: entity.defId,
+        killed: false,
+        score: 0,
+        credits: 0,
+        position: { ...entity.position },
+        radius: entity.radius,
+        drops: def.dropTable ?? { credits: [0, 0] },
+      }
     }
-    const result = {
+    const result: HitResult = {
       id: entity.defId,
       killed: true,
       score: def.isTurret ? 150 : 90,
       credits: def.isTurret ? 30 : 20,
       position: { ...entity.position },
+      radius: entity.radius,
       drops: def.dropTable ?? { credits: [0, 0] },
     }
     this.kill(entity)

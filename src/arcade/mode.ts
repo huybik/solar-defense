@@ -70,6 +70,19 @@ export class ArcadeMode {
   private shopReturnPhase: ArcadePhase = 'map'
   private selectedLogId: string | null = null
   private message = 'Mission Control online.'
+  private readonly onKeyDown = (event: KeyboardEvent) => {
+    if (event.code !== 'Escape' || event.repeat) return
+    if (this.state.phase !== 'combat' || !this.arena) return
+    event.preventDefault()
+    this.toggleCombatPause()
+  }
+  private readonly onTouchStart = (event: TouchEvent) => {
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (!target?.closest('.arc-touch-pause')) return
+    if (this.state.phase !== 'combat' || !this.arena) return
+    event.preventDefault()
+    this.toggleCombatPause()
+  }
 
   constructor(
     bridge: GameBridge,
@@ -104,6 +117,8 @@ export class ArcadeMode {
 
     this.hud = new ArcadeHUD(uiContainer)
     this.hud.onAction((action, params) => this.handleUiAction(action, params))
+    window.addEventListener('keydown', this.onKeyDown)
+    document.addEventListener('touchstart', this.onTouchStart, { capture: true, passive: false })
 
     this.setPhase('title')
     this.syncMenuBackground()
@@ -114,25 +129,27 @@ export class ArcadeMode {
     this.syncMenuBackground()
 
     if (this.state.phase === 'combat' && this.arena) {
-      const events = this.arena.update(delta)
-      for (const event of events) this.handleCombatEvent(event)
+      if (!this.state.paused) {
+        const events = this.arena.update(delta)
+        for (const event of events) this.handleCombatEvent(event)
 
-      const snapshot = this.arena.getSnapshot()
-      const anyPilotInDanger = snapshot.players.some((player) =>
-        player.alive && player.health < player.maxHealth * 0.35,
-      )
-      this.state = buildCombatState(this.state, snapshot, this.campaign?.score ?? 0)
-      this.music.setCue(
-        snapshot.boss
-          ? 'arcade_boss'
-          : anyPilotInDanger
-            ? 'arcade_danger'
-            : 'arcade_action',
-        snapshot.planetId,
-      )
+        const snapshot = this.arena.getSnapshot()
+        const anyPilotInDanger = snapshot.players.some((player) =>
+          player.alive && player.health < player.maxHealth * 0.35,
+        )
+        this.state = buildCombatState(this.state, snapshot, this.campaign?.score ?? 0)
+        this.music.setCue(
+          snapshot.boss
+            ? 'arcade_boss'
+            : anyPilotInDanger
+              ? 'arcade_danger'
+              : 'arcade_action',
+          snapshot.planetId,
+        )
 
-      if (this.arena.isDone()) {
-        this.finishCombat()
+        if (this.arena.isDone()) {
+          this.finishCombat()
+        }
       }
     } else {
       this.menuBackground?.update(delta)
@@ -193,6 +210,8 @@ export class ArcadeMode {
   }
 
   dispose(): void {
+    window.removeEventListener('keydown', this.onKeyDown)
+    document.removeEventListener('touchstart', this.onTouchStart, true)
     this.disposeArena()
     this.menuBackground?.dispose()
     this.menuBackground = null
@@ -202,6 +221,14 @@ export class ArcadeMode {
   }
 
   private handleUiAction(action: string, params: Record<string, string>): void {
+    switch (action) {
+      case 'resume_combat':
+        this.setCombatPaused(false)
+        return
+      case 'pause_overlay':
+        return
+    }
+
     routeArcadeUiAction(action, params, {
       startCampaign: (slot, continueExisting) => this.startCampaign(slot, continueExisting),
       setDifficulty: (difficulty) => this.setDifficulty(difficulty),
@@ -236,10 +263,12 @@ export class ArcadeMode {
   }
 
   private patchState(patch: Partial<ArcadeState>): void {
+    const phase = patch.phase ?? this.state.phase
     this.state = {
       ...this.state,
       ...patch,
       currentTab: this.shopTab,
+      paused: patch.paused ?? (phase === 'combat' ? this.state.paused : false),
     }
   }
 
@@ -365,6 +394,7 @@ export class ArcadeMode {
     const level = getLevelDef(this.selectedLevelId)
     this.patchState({
       phase: 'combat',
+      paused: false,
       ...this.routeStatePatch(),
       debrief: null,
       comms: [level.briefing],
@@ -482,6 +512,7 @@ export class ArcadeMode {
     this.disposeArena()
     this.patchState({
       phase: 'map',
+      paused: false,
       ...this.campaignSummaryPatch(),
       debrief: null,
     })
@@ -537,6 +568,16 @@ export class ArcadeMode {
 
   private setPhase(phase: ArcadePhase): void {
     this.patchState({ phase })
+  }
+
+  private setCombatPaused(paused: boolean): void {
+    if (this.state.phase !== 'combat' || !this.arena || this.state.paused === paused) return
+    this.patchState({ paused })
+    this.message = paused ? 'Combat paused.' : 'Combat resumed.'
+  }
+
+  private toggleCombatPause(): void {
+    this.setCombatPaused(!this.state.paused)
   }
 
   private runNamedShopAction(action: ArcadeShopAction, entryId: string, slot?: WeaponSlot): void {

@@ -68,13 +68,29 @@ export class MeteorManager {
 
   hit(meteor: MeteorEntity, damage: number): HitResult {
     if (!meteor.alive) {
-      return { id: meteor.defId, killed: false, score: 0, credits: 0, position: { ...meteor.position }, drops: { credits: [0, 0] } }
+      return {
+        id: meteor.defId,
+        killed: false,
+        score: 0,
+        credits: 0,
+        position: { ...meteor.position },
+        radius: meteor.radius,
+        drops: { credits: [0, 0] },
+      }
     }
 
     meteor.health -= damage
     if (meteor.health > 0) {
       const def = getMeteorDef(meteor.defId)
-      return { id: meteor.defId, killed: false, score: 0, credits: 0, position: { ...meteor.position }, drops: def.drops }
+      return {
+        id: meteor.defId,
+        killed: false,
+        score: 0,
+        credits: 0,
+        position: { ...meteor.position },
+        radius: meteor.radius,
+        drops: def.drops,
+      }
     }
 
     const def = getMeteorDef(meteor.defId)
@@ -84,6 +100,7 @@ export class MeteorManager {
       score: def.score,
       credits: def.credits,
       position: { ...meteor.position },
+      radius: meteor.radius,
       drops: def.drops,
     }
     this.kill(meteor)

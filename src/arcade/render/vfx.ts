@@ -137,7 +137,8 @@ export class VFXManager {
     }
   }
 
-  enemyExplosion(x: number, y: number, color: string, scale = 1): void {
+  enemyExplosion(x: number, y: number, color: string, radius = 1): void {
+    const scale = Math.max(0.72, radius)
     const flashSize = 2.8 + scale * 1.9
     const variant = Math.floor(Math.random() * 3)
     if (variant === 0) {

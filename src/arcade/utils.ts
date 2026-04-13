@@ -25,6 +25,7 @@ export interface HitResult {
   score: number
   credits: number
   position: Vec2
+  radius: number
   drops: DropTable
 }
 
