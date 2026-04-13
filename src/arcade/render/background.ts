@@ -8,7 +8,7 @@ import {
   PlaneGeometry,
   RepeatWrapping,
 } from 'three/webgpu'
-import { float, texture, uniform, uv, vec2 } from 'three/tsl'
+import { float, texture } from 'three/tsl'
 import { ARENA, type BackgroundPalette, type PlanetId } from '../types'
 import { cloneTexture } from './sprites'
 import { removeAndDisposeObjectLater } from './deferred-dispose'
@@ -35,7 +35,6 @@ export class BackgroundController {
   private flashOpacity = 0
   private bossDarken = false
   private bossDarkenT = 0
-  private readonly planetScroll = uniform(0)
 
   constructor(planetId: PlanetId) {
     this.palette = BACKGROUND_PALETTES[planetId]
@@ -65,7 +64,10 @@ export class BackgroundController {
   }
 
   update(delta: number, hazardTint = 0): void {
-    this.planetScroll.value += this.palette.scroll[1] * delta
+    const mat = this.planetMesh.material as MeshBasicMaterial
+    if (mat.map) {
+      mat.map.offset.x += this.palette.scroll[1] * delta
+    }
 
     this.updateFlash(delta)
     this.updateBossDarken(delta)
@@ -102,13 +104,9 @@ export class BackgroundController {
     layerTexture.repeat.set(1.8, 1.18)
 
     const material = new MeshBasicNodeMaterial()
-    const planetSample = texture(
-      layerTexture,
-      uv().add(vec2(this.planetScroll, float(0))),
-    ).setUpdateMatrix(true)
 
     material.map = layerTexture
-    material.colorNode = planetSample.rgb
+    material.colorNode = texture(layerTexture).rgb
     material.opacityNode = float(0.4)
     material.transparent = true
     material.toneMapped = false
