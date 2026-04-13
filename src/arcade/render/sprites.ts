@@ -22,7 +22,7 @@ import extXml from '../../assets/kenney/space-shooter-extension/Spritesheet/spac
 
 /* ── Non-spritesheet assets (backgrounds, planets) ── */
 const imageModules = import.meta.glob(
-  ['../../assets/planets/**/*.{png,jpg,jpeg}', '../../assets/kenney/space-shooter-redux/Backgrounds/**/*.png'],
+  ['../../assets/planets/**/*.{png,jpg,jpeg,svg}', '../../assets/kenney/space-shooter-redux/Backgrounds/**/*.png'],
   { eager: true, import: 'default' },
 ) as Record<string, string>
 

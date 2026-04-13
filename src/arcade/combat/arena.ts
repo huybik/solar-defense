@@ -55,8 +55,16 @@ import { Portal } from './portal'
 import { applyPickupEffect } from './pickup-effects'
 import { getNextMainLevel } from '../data/campaign'
 import {
+  applyBossWeaponReward,
+  getPlanetFragmentSprite,
+  isPlanetFinalBossStage,
+  resolveBossWeaponReward,
+  type BossWeaponReward,
+} from './boss-rewards'
+import {
   ARENA,
   COMBAT_CONST,
+  PLANET_LABELS,
   PLAYER_CONST,
   type ArcadeEvent,
   type BossEntity,
@@ -152,8 +160,12 @@ export class Arena {
   private readonly earnedUpgrades: string[] = []
   private portal: Portal | null = null
   private readonly isFinalLevel: boolean
+  private readonly requiresPlanetFragment: boolean
   private readonly ownedUpgrades: Set<string>
   private readonly modifiers: BossUpgradeModifiers
+  private pendingBossWeaponReward: BossWeaponReward | null = null
+  private planetFragmentDropped = false
+  private planetFragmentCollected = false
   private paused = false
   private _cachedTargets: DamageableTarget[] = []
   private _cachedPlayerHomingTargets: HomingTarget[] = []
@@ -231,6 +243,7 @@ export class Arena {
     this.audio.ui()
 
     this.isFinalLevel = getNextMainLevel(levelId) === null
+    this.requiresPlanetFragment = isPlanetFinalBossStage(this.level)
     this.bossTriggerTime = createBossTriggerTime(this.level)
     this.waveMilestones = createWaveMilestones(this.bossTriggerTime)
 
@@ -369,10 +382,16 @@ export class Arena {
     this.group.position.set(this.vfx.getShakeOffset().x, this.vfx.getShakeOffset().y, 0)
 
     if (this.boss && this.boss.isDefeated()) {
-      if (this.isFinalLevel && !this.portal) {
-        this.spawnPortal()
+      if (this.requiresPlanetFragment) {
+        if (this.planetFragmentCollected) {
+          this.beginClear(true)
+        }
+      } else {
+        if (this.isFinalLevel && !this.portal) {
+          this.spawnPortal()
+        }
+        if (!this.portal) this.beginClear(true)
       }
-      if (!this.portal) this.beginClear(true)
     } else if (!this.level.hasBoss && this.elapsed >= this.level.duration && this.enemies.getActive().length === 0) {
       this.beginClear(true)
     }
@@ -1017,6 +1036,15 @@ export class Arena {
       this.revealSecretLevel(secret.revealSecretId, events)
     }
 
+    if (pickup.type === 'planet_fragment') {
+      this.planetFragmentCollected = true
+      this.latestComms = [
+        `${PLANET_LABELS[this.level.planet].toUpperCase()} FRAGMENT SECURED.`,
+        'ROUTE STABILIZED. PREPARE FOR DEBRIEF.',
+      ]
+      this.beginClear(true)
+    }
+
     events.push({ type: 'pickup_collected', pickupType: pickup.type, value: pickup.value })
   }
 
@@ -1053,7 +1081,7 @@ export class Arena {
     if (kind === 'enemy') {
       this.vfx.enemyExplosion(result.position.x, result.position.y, colors[kind], result.radius)
     } else {
-      this.vfx.explosion(result.position.x, result.position.y, colors[kind], Math.max(0.7, result.radius))
+      this.vfx.explosion(result.position.x, result.position.y, colors[kind], 0.8)
     }
     this.audio.explosion()
     this.maybeDrop(result.position, result.drops)
@@ -1323,17 +1351,39 @@ export class Arena {
         this.scoreState.score += event.score
         this.scoreState.credits += event.credits
         this.background.setBossDarken(false)
+        this.enemyBullets.clear()
+        this.hazards.length = 0
+
+        const primary = this.players[0].getState()
+        this.pendingBossWeaponReward = resolveBossWeaponReward(
+          this.level,
+          primary.loadout,
+          this.powerups.getActive(primary.id),
+        )
+
         const bossId = this.level.bossId
         const upgrade = bossId ? getBossUpgrade(bossId) : null
+        const comms = [`${event.name.toUpperCase()} DESTROYED.`]
+
+        if (this.pendingBossWeaponReward) {
+          comms.push(
+            `SALVAGE LOCKED: ${this.pendingBossWeaponReward.weaponName.toUpperCase()} -> L${this.pendingBossWeaponReward.nextLevel + 1}.`,
+          )
+        } else {
+          comms.push('NO ELIGIBLE EQUIPPED WEAPON UPGRADES REMAIN.')
+        }
+
         if (upgrade && !this.ownedUpgrades.has(upgrade.id) && !this.earnedUpgrades.includes(upgrade.id)) {
           this.earnedUpgrades.push(upgrade.id)
-          this.latestComms = [
-            `${event.name.toUpperCase()} DESTROYED.`,
-            `UPGRADE ACQUIRED: ${upgrade.label} (${upgrade.description})`,
-          ]
-        } else {
-          this.latestComms = [`${event.name.toUpperCase()} DESTROYED.`]
+          comms.push(`CORE BONUS: ${upgrade.label} (${upgrade.description})`)
         }
+
+        if (this.requiresPlanetFragment && !this.planetFragmentDropped) {
+          this.spawnPlanetFragment()
+          comms.push(`SECURE THE ${PLANET_LABELS[this.level.planet].toUpperCase()} RING FRAGMENT.`)
+        }
+
+        this.latestComms = comms
         break
       }
     }
@@ -1387,6 +1437,10 @@ export class Arena {
 
   private finalizeCombat(success: boolean): ReturnType<typeof finalizeCombatResult> {
     this.powerups.clear(this.getPowerUpOwners())
+    if (success && this.pendingBossWeaponReward) {
+      applyBossWeaponReward(this.players[0].getState().loadout, this.pendingBossWeaponReward)
+      this.pendingBossWeaponReward = null
+    }
     return finalizeCombatResult(success, this.level, this.elapsed, this.scoreState)
   }
 
@@ -1397,5 +1451,29 @@ export class Arena {
     this.result.debrief = finalized.debrief
     this.levelDebrief = finalized.debrief
     events.push(...finalized.events)
+  }
+
+  private spawnPlanetFragment(): void {
+    const bossPos = this.boss?.getState().position
+    if (!bossPos) return
+    this.planetFragmentDropped = true
+    this.pickups.spawn(
+      'planet_fragment',
+      { ...bossPos },
+      this.level.planet,
+      1,
+      getPlanetFragmentSprite(this.level.planet),
+      {
+        motion: 'hover',
+        radius: 1.05,
+        width: 1.9,
+        height: 1.9,
+        rotationSpeed: 1.05,
+        bobAmplitude: 0.45,
+        bobSpeed: 3,
+      },
+    )
+    this.vfx.explosion(bossPos.x, bossPos.y, '#ffe08a', 1.1)
+    this.vfx.screenShake(0.45, 0.3)
   }
 }

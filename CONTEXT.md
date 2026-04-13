@@ -37,7 +37,7 @@ Shared background music now covers the full game loop: cinematic, lesson phases,
 - `src/utils.ts`: shared utilities (`escapeHtml`, `clamp`, `lerp`) used by both lesson and arcade
 - `src/types.ts`: shared types, constants (`INTERACTIVE_PHASES`), and `normalizeId` utility
 - `src/game.ts`: thin SDK-facing facade (`createGame()` wiring, actions, initial state) that delegates to `src/lesson/runtime.ts`
-- `src/sdk-shim.ts`: standalone stub for `@learnfun/game-sdk` — provides `createGame`, `GameBridge`, and type exports with no-op host communication; `vite.config.ts` auto-selects the real SDK or this shim based on whether `../_sdk/src` exists at build time
+- `src/sdk-shim.ts`: standalone stub for `@learnfun/game-sdk` — provides `createGame`, `GameBridge`, and type exports with no-op host communication; also marks standalone runtime so arcade warning VO can replace missing teacher callouts. `vite.config.ts` auto-selects the real SDK or this shim based on whether `../_sdk/src` exists at build time
 - `src/lesson/`: lesson runtime split by responsibility — `runtime.ts` (scene/UI orchestration, shared transition timer, centralized render/sync), `flow.ts` (hotspot/puzzle/phase helpers), `events.ts` (teacher event emission), `interactions.ts` (UI + pointer helpers)
 - `src/main.ts`: bridge registration and default init data
 - `src/style.css`: explorer/lesson styles (CSS vars, glass cards, mission UI, responsive)
@@ -82,10 +82,11 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 - `combat/`: runtime entities — `arena.ts`, `player.ts`, `bullets.ts`, `weapons.ts`, `enemies.ts`, `boss.ts`, `meteors.ts`, `terrain.ts`, `pickups.ts`, `power-ups.ts`, plus extracted helper modules
 - `combat/bullets.ts`: projectile runtime now keeps reusable mesh pools plus a 3-phase missile model (`launch -> acquire -> terminal`) with smoothed visual rotation, cached lock reacquire, target memory, proximity fuse state, splash metadata, and trail hooks
 - `combat/arena.ts`: combat facade; still owns the live loop/collision flow, but now centralizes projectile-hit bookkeeping/explosions, cached damageable-target handling, pickup application, and delegates boss-upgrade math, timeline/scheduled spawns, secret rules, debrief/result finalization, and 2-player co-op runtime coordination (P1 + wingmate)
+- `combat/boss-rewards.ts`: planet-boss reward helpers — picks the permanent free `+1` weapon upgrade (prefers current-episode equipped weapons), detects planet-final boss stages, and maps planet fragment sprite keys
 - Regular enemies now resolve through planet-specific sprite/tint variant tables, so the authored `EnemyType` archetypes can stay shared while each planet still gets its own visual roster; filler waves also pull from planet-specific enemy pools, and normal-enemy HP now scales with campaign episode + combat wave on top of difficulty
 - `combat/modifiers.ts`, `timeline.ts`, `pickup-effects.ts`, `secret-rules.ts`, `outcome.ts`: extracted arcade combat subsystems; `timeline.ts` now delays boss entry until the authored spawn/hazard script has played out instead of interrupting late segments
 - `progression/`: economy & persistence — `inventory.ts`, `shop.ts`, `scoring.ts`
-- `render/`: presentation — `background.ts`, `sprites.ts`, `vfx.ts`, `audio.ts`, `music.ts`, `hud.ts`
+- `render/`: presentation — `background.ts`, `sprites.ts`, `vfx.ts`, `audio.ts`, `music.ts`, `hud.ts`, `voice.ts`
 
 ### Co-op combat
 - Combat now starts with P1 only; P2 joins mid-fight by pressing `P`, which also reveals a flashing top-right co-op prompt until joined
@@ -101,6 +102,8 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 - Both use the same `BossController` class — mini-bosses are purely a data difference
 - Boss attacks are now more data-driven: `BossAttackDef` supports extra pattern modifiers (`layers`, `gapCount`, `arms`, `beamCount`, `originOffsets`, wave/homing tuning) plus a new `curtain` pattern, and late full-boss phases use those richer mixes instead of only recycling the original attack trio
 - Arena now computes boss trigger from both stage duration and the latest authored spawn/hazard beat so bosses stay the finale even on scripted mini/full-boss stages
+- Boss defeats now also queue one permanent free `+1` upgrade for an eligible equipped weapon; the reward is finalized on successful clear after temporary power-up boosts are reverted
+- Planet-final boss stages now drop a hovering planet-specific ring fragment at the boss position; the player must collect it before the stage can clear and the route can advance
 
 ### Weapon mastery
 - Per-weapon kill counter persisted in `CampaignState.weaponMastery`
@@ -118,16 +121,19 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 ### Teacher / bridge events
 `arcade_started`, `wave_start`, `wave_clear`, `boss_enter`, `boss_phase`, `boss_vulnerable`, `boss_defeated`, `player_down`, `pickup_collected`, `terminal_found`, `secret_revealed`, `synergy_discovered`, `stage_clear`, `stage_failed`
 
+- Standalone arcade runs now replace missing SDK/teacher warnings with local Web Speech VO (`src/arcade/render/voice.ts`) for high-signal combat events such as waves, boss phases, vulnerability, and pilot-down alerts; it activates only after the existing audio unlock gesture
+
 ### Controls
 Auto-fire is always on.
 P1: WASD or arrows move, E uses special, Q cycles specials, Space/F drops MegaBomb.
 P2: IJKL move, O uses special, U cycles specials, P drops MegaBomb, or use the first connected gamepad.
-Esc pauses.
+Esc pauses/resumes combat, and the pause overlay offers Resume/Map actions.
 
 ### Mobile / Touch Controls
-On touch-primary devices (`pointer: coarse`), Touhou-style drag-to-move input replaces keyboard for P1. Drag anywhere on screen to move the ship (relative movement, 1:1 mapped to arena units). On-screen BOMB, SP, and pause buttons appear during combat. Portrait orientation widens the camera FOV from 40° to 55° and clamps player movement to the visible area. Touch buttons are DOM overlays managed by `createTouchSource()` in `src/arcade/combat/player.ts`. Browser zoom/pan gestures are suppressed via `touch-action: none` and viewport meta.
+On touch-primary devices (`pointer: coarse`), Touhou-style drag-to-move input replaces keyboard for P1. Drag anywhere on screen to move the ship (relative movement, 1:1 mapped to arena units). On-screen BOMB, SP, and pause buttons appear during combat, and the touch pause button now freezes combat and opens the same Resume/Map overlay used on desktop. Portrait orientation widens the camera FOV from 40° to 55° and clamps player movement to the visible area. Touch buttons are DOM overlays managed by `createTouchSource()` in `src/arcade/combat/player.ts`. Browser zoom/pan gestures are suppressed via `touch-action: none` and viewport meta.
 - Arcade combat now reapplies portrait viewport bounds as soon as a fight starts, and enemy spawn lanes clamp to the current visible combat width so mobile portrait runs do not spawn side/top waves offscreen.
 - `Attractor Field` pickup pull now uses distance-based magnetism with capped velocity in `src/arcade/combat/pickups.ts`, so drops start drifting in before they are already inside pickup range.
+- Pickup runtime now supports both falling drops and hovering pickups; planet fragments use the hover path plus lightweight SVG fragment textures under `src/assets/planets/fragments/`
 
 ## Visual System
 
@@ -143,6 +149,7 @@ On touch-primary devices (`pointer: coarse`), Touhou-style drag-to-move input re
 - Command-center title/map/briefing phases now render a planet backdrop too, so new campaigns no longer sit on an empty black canvas between fights
 - Arcade backdrop planet scrolling now happens in shader space instead of mutating texture offsets on the CPU each frame
 - Missile exhaust now uses pooled point-trail VFX so authored `trailColor` values render without per-missile trail mesh churn
+- Enemy kill explosions now scale from the destroyed target radius instead of using a near-constant blast size
 - Arcade combat teardown now defers sprite/material/geometry disposal until after render, side-entry enemies spawn fully offscreen again, and empty VFX point clouds hide instead of issuing WebGPU zero-vertex draw warnings
 - Deferred arcade disposals now age across multiple render flushes and only force-drain on full runtime teardown, which avoids WebGPU destroyed-texture warnings during menu/combat scene swaps
 - Lesson scene teardown now also disposes scene graph materials/textures and ignores late async NASA texture results after dispose so renderer resets do not leak WebGPU resources

@@ -93,5 +93,8 @@ export function applyPickupEffect(
       context.scorePopup(pickup.position.x, pickup.position.y + 0.6, label, '#8cffb4')
       return { latestComms: [label], event: null }
     }
+    case 'planet_fragment':
+      context.scorePopup(pickup.position.x, pickup.position.y + 0.6, 'FRAGMENT', '#ffe48a')
+      return { latestComms: null, event: null }
   }
 }

@@ -63,6 +63,8 @@ export type HostToGame = unknown
 export type BridgeConfig = unknown
 export type MultiplayerGame = unknown
 
+;(globalThis as typeof globalThis & { __LEARNFUN_SDK_SHIM__?: boolean }).__LEARNFUN_SDK_SHIM__ = true
+
 // --- GameBridge stub ---
 
 export class GameBridge {

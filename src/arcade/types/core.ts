@@ -93,6 +93,7 @@ export const WEAPON_SLOTS: WeaponSlot[] = ['front', 'rear', ...SIDEKICK_SLOTS, '
 export type ProjectileType = 'bullet' | 'beam' | 'missile' | 'spread' | 'wave' | 'mine' | 'orbit'
 export type ProjectileOwner = 'player' | 'enemy' | 'neutral'
 export type MissilePhase = 'launch' | 'acquire' | 'terminal'
+export type PickupMotion = 'fall' | 'hover'
 
 export type PickupType =
   | 'credits'
@@ -107,6 +108,7 @@ export type PickupType =
   | 'pretzel'
   | 'astronaut'
   | 'powerup'
+  | 'planet_fragment'
 
 export interface DropTable {
   credits?: [number, number]

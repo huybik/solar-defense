@@ -2,6 +2,7 @@ import type { Group, Object3D } from 'three/webgpu'
 import type {
   DropTable,
   MissilePhase,
+  PickupMotion,
   PickupType,
   ProjectileOwner,
   ProjectileType,
@@ -258,11 +259,16 @@ export interface PickupEntity {
   id: number
   type: PickupType
   position: Vec2
+  basePosition: Vec2
   velocity: Vec2
+  motion: PickupMotion
   radius: number
   value: number
   age: number
   sprite: string
+  rotationSpeed: number
+  bobAmplitude: number
+  bobSpeed: number
   payload?: string
   alive: boolean
   mesh: Object3D | null

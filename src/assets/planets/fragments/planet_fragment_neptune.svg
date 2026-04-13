@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="core" x1="30" x2="212" y1="28" y2="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#edf1ff"/>
+      <stop offset=".42" stop-color="#7e96ff"/>
+      <stop offset="1" stop-color="#27347e"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="62" x2="182" y1="30" y2="178" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbfcff" stop-opacity=".94"/>
+      <stop offset="1" stop-color="#fbfcff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(128 128) rotate(10)">
+    <path d="M18-96c40 10 73 41 82 77-10 22-27 42-51 58-21 14-45 24-68 28-22-18-38-44-45-75 16-34 43-61 82-78z" fill="url(#core)" stroke="#e7ecff" stroke-opacity=".74" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M15-68c26 7 48 22 61 45-8 13-19 25-34 35-14 10-29 16-43 19-13-10-23-26-29-46 10-22 25-39 45-53z" fill="#131735" fill-opacity=".8"/>
+    <path d="M26-88c22 5 43 16 59 31-23 3-43 12-60 28-15 12-26 27-32 43-10-14-15-32-13-49 9-22 25-39 46-53z" fill="url(#shine)"/>
+    <circle cx="60" cy="-61" r="9" fill="#f8faff"/>
+    <circle cx="60" cy="-61" r="23" fill="#f8faff" fill-opacity=".22"/>
+  </g>
+</svg>

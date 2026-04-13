@@ -16,6 +16,7 @@ import { MAIN_ROUTE, isLevelUnlocked } from './data/campaign'
 import { getLevelDef } from './data/levels'
 import { preloadAtlases } from './render/sprites'
 import { ArcadeHUD } from './render/hud'
+import { ArcadeWarningVoice } from './render/voice'
 import { createNewCampaign, listSaveSlots, loadCampaign, saveCampaign } from './progression/inventory'
 import {
   buyAmmo,
@@ -46,6 +47,10 @@ import type {
   WeaponSlot,
 } from './types'
 
+function shouldUseStandaloneVoiceFallback(): boolean {
+  return Boolean((globalThis as typeof globalThis & { __LEARNFUN_SDK_SHIM__?: boolean }).__LEARNFUN_SDK_SHIM__)
+}
+
 export class ArcadeMode {
   readonly scene: Scene
   readonly camera: PerspectiveCamera
@@ -56,6 +61,7 @@ export class ArcadeMode {
   private readonly renderer: WebGPURenderer
   private readonly postProcessing: PostProcessing
   private readonly onExit: () => void
+  private readonly warningVoice: ArcadeWarningVoice
   private readonly arenaRoot = new Group()
 
   private audioActivated = false
@@ -70,19 +76,6 @@ export class ArcadeMode {
   private shopReturnPhase: ArcadePhase = 'map'
   private selectedLogId: string | null = null
   private message = 'Mission Control online.'
-  private readonly onKeyDown = (event: KeyboardEvent) => {
-    if (event.code !== 'Escape' || event.repeat) return
-    if (this.state.phase !== 'combat' || !this.arena) return
-    event.preventDefault()
-    this.toggleCombatPause()
-  }
-  private readonly onTouchStart = (event: TouchEvent) => {
-    const target = event.target instanceof HTMLElement ? event.target : null
-    if (!target?.closest('.arc-touch-pause')) return
-    if (this.state.phase !== 'combat' || !this.arena) return
-    event.preventDefault()
-    this.toggleCombatPause()
-  }
 
   constructor(
     bridge: GameBridge,
@@ -95,6 +88,7 @@ export class ArcadeMode {
     this.music = music
     this.renderer = renderer
     this.onExit = onExit
+    this.warningVoice = new ArcadeWarningVoice(shouldUseStandaloneVoiceFallback())
 
     this.scene = new Scene()
     this.scene.background = new Color('#02040b')
@@ -117,8 +111,6 @@ export class ArcadeMode {
 
     this.hud = new ArcadeHUD(uiContainer)
     this.hud.onAction((action, params) => this.handleUiAction(action, params))
-    window.addEventListener('keydown', this.onKeyDown)
-    document.addEventListener('touchstart', this.onTouchStart, { capture: true, passive: false })
 
     this.setPhase('title')
     this.syncMenuBackground()
@@ -129,27 +121,25 @@ export class ArcadeMode {
     this.syncMenuBackground()
 
     if (this.state.phase === 'combat' && this.arena) {
-      if (!this.state.paused) {
-        const events = this.arena.update(delta)
-        for (const event of events) this.handleCombatEvent(event)
+      const events = this.arena.update(delta)
+      for (const event of events) this.handleCombatEvent(event)
 
-        const snapshot = this.arena.getSnapshot()
-        const anyPilotInDanger = snapshot.players.some((player) =>
-          player.alive && player.health < player.maxHealth * 0.35,
-        )
-        this.state = buildCombatState(this.state, snapshot, this.campaign?.score ?? 0)
-        this.music.setCue(
-          snapshot.boss
-            ? 'arcade_boss'
-            : anyPilotInDanger
-              ? 'arcade_danger'
-              : 'arcade_action',
-          snapshot.planetId,
-        )
+      const snapshot = this.arena.getSnapshot()
+      const anyPilotInDanger = snapshot.players.some((player) =>
+        player.alive && player.health < player.maxHealth * 0.35,
+      )
+      this.state = buildCombatState(this.state, snapshot, this.campaign?.score ?? 0)
+      this.music.setCue(
+        snapshot.boss
+          ? 'arcade_boss'
+          : anyPilotInDanger
+            ? 'arcade_danger'
+            : 'arcade_action',
+        snapshot.planetId,
+      )
 
-        if (this.arena.isDone()) {
-          this.finishCombat()
-        }
+      if (this.arena.isDone()) {
+        this.finishCombat()
       }
     } else {
       this.menuBackground?.update(delta)
@@ -166,6 +156,7 @@ export class ArcadeMode {
     this.audioActivated = true
     this.music.activate()
     this.arena?.activateAudio()
+    this.warningVoice.activate()
   }
 
   handleResize(width: number, height: number): void {
@@ -210,8 +201,7 @@ export class ArcadeMode {
   }
 
   dispose(): void {
-    window.removeEventListener('keydown', this.onKeyDown)
-    document.removeEventListener('touchstart', this.onTouchStart, true)
+    this.warningVoice.stop()
     this.disposeArena()
     this.menuBackground?.dispose()
     this.menuBackground = null
@@ -465,6 +455,7 @@ export class ArcadeMode {
       phase: debrief?.success ? 'debrief' : 'game_over',
       ...this.campaignSummaryPatch(),
       debrief: debrief ?? null,
+      paused: false,
     })
     this.message = debrief?.summary ?? 'Mission failed.'
     this.disposeArena()
@@ -488,6 +479,7 @@ export class ArcadeMode {
 
   private handleCombatEvent(event: ArcadeEvent): void {
     this.bridge.emitEvent(event.type, event as unknown as Record<string, unknown>)
+    this.warningVoice.announce(event)
     if (event.type === 'portal_entered') {
       this.navigateToPortal()
       return
@@ -512,9 +504,9 @@ export class ArcadeMode {
     this.disposeArena()
     this.patchState({
       phase: 'map',
-      paused: false,
       ...this.campaignSummaryPatch(),
       debrief: null,
+      paused: false,
     })
     this.message = message
   }
@@ -610,6 +602,7 @@ export class ArcadeMode {
   }
 
   private disposeArena(): void {
+    this.warningVoice.stop()
     this.arena?.dispose()
     this.arena = null
   }
