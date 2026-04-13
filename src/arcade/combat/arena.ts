@@ -88,6 +88,7 @@ export interface ArenaSnapshot {
   levelName: string
   planetId: LevelDef['planet']
   elapsed: number
+  paused: boolean
   wave: number
   totalWaves: number
   score: number
@@ -153,6 +154,7 @@ export class Arena {
   private readonly isFinalLevel: boolean
   private readonly ownedUpgrades: Set<string>
   private readonly modifiers: BossUpgradeModifiers
+  private paused = false
   private _cachedTargets: DamageableTarget[] = []
   private _cachedPlayerHomingTargets: HomingTarget[] = []
   private _cachedEnemyHomingTargets: HomingTarget[] = []
@@ -239,9 +241,16 @@ export class Arena {
     if (this.result.ended) return []
 
     const inputs = this.inputs.map((input) => input.poll())
-    this.elapsed += delta
     const events: ArcadeEvent[] = [...this.result.events]
     this.result.events = []
+    if (inputs.some((input) => input.pausePressed)) {
+      this.paused = !this.paused
+    }
+    if (this.paused) {
+      return events
+    }
+
+    this.elapsed += delta
     let secondaryJoined = false
 
     const secondaryPlayer = this.players[1]
@@ -410,6 +419,7 @@ export class Arena {
       levelName: this.level.name,
       planetId: this.level.planet,
       elapsed: this.elapsed,
+      paused: this.paused,
       wave: this.wave,
       totalWaves: this.totalWaves,
       score: this.scoreState.score,
@@ -446,6 +456,14 @@ export class Arena {
 
   wasSuccessful(): boolean {
     return this.result.success
+  }
+
+  isPaused(): boolean {
+    return this.paused
+  }
+
+  setPaused(paused: boolean): void {
+    this.paused = paused
   }
 
   getDebrief(): DebriefData | null {

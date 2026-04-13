@@ -94,6 +94,7 @@ export function buildCombatState(
 
   return {
     ...currentState,
+    paused: snapshot.paused,
     planetId: snapshot.planetId,
     planetName: PLANET_LABELS[snapshot.planetId],
     levelId: snapshot.levelId,

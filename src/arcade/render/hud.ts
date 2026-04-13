@@ -68,7 +68,7 @@ export class ArcadeHUD {
       if (phaseChanged || pausedChanged) {
         this.lastPhase = view.state.phase
         this.lastCombatPaused = view.state.paused
-        this.commitMarkup(this.render(view), true)
+        this.commitMarkup(this.render(view), phaseChanged)
       }
       this.updateCombat(view)
       return

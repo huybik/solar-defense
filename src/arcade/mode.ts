@@ -571,13 +571,10 @@ export class ArcadeMode {
   }
 
   private setCombatPaused(paused: boolean): void {
-    if (this.state.phase !== 'combat' || !this.arena || this.state.paused === paused) return
-    this.patchState({ paused })
+    if (this.state.phase !== 'combat' || !this.arena || this.arena.isPaused() === paused) return
+    this.arena.setPaused(paused)
+    this.state = buildCombatState(this.state, this.arena.getSnapshot(), this.campaign?.score ?? 0)
     this.message = paused ? 'Combat paused.' : 'Combat resumed.'
-  }
-
-  private toggleCombatPause(): void {
-    this.setCombatPaused(!this.state.paused)
   }
 
   private runNamedShopAction(action: ArcadeShopAction, entryId: string, slot?: WeaponSlot): void {
