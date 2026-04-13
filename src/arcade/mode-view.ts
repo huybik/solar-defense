@@ -9,9 +9,6 @@ import {
   type ArcadeEvent,
   type ArcadeState,
   type CampaignState,
-  type Difficulty,
-  type PlanetId,
-  type WeaponSlot,
 } from './types'
 import type { ArenaSnapshot } from './combat/arena'
 
@@ -274,16 +271,4 @@ export function loadoutLines(campaign: CampaignState): string[] {
 
 export function prettyId(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-}
-
-export function isDifficulty(value: string): value is Difficulty {
-  return ['easy', 'normal', 'hard', 'impossible', 'suicide'].includes(value)
-}
-
-export function isWeaponSlot(value: string): value is WeaponSlot {
-  return ['front', 'rear', 'sidekickL', 'sidekickR', 'special'].includes(value)
-}
-
-export function isPlanetId(value: string): value is PlanetId {
-  return value in PLANET_LABELS
 }
