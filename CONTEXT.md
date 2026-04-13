@@ -38,7 +38,7 @@ Shared background music now covers the full game loop: cinematic, lesson phases,
 - `src/types.ts`: shared types, constants (`INTERACTIVE_PHASES`), and `normalizeId` utility
 - `src/game.ts`: thin SDK-facing facade (`createGame()` wiring, actions, initial state) that delegates to `src/lesson/runtime.ts`
 - `src/sdk-shim.ts`: standalone stub for `@learnfun/game-sdk` — provides `createGame`, `GameBridge`, and type exports with no-op host communication; `vite.config.ts` auto-selects the real SDK or this shim based on whether `../_sdk/src` exists at build time
-- `src/lesson/`: lesson runtime split by responsibility — `runtime.ts` (scene/UI orchestration), `flow.ts` (hotspot/puzzle/phase helpers), `events.ts` (teacher event emission), `interactions.ts` (UI + pointer helpers)
+- `src/lesson/`: lesson runtime split by responsibility — `runtime.ts` (scene/UI orchestration, shared transition timer, centralized render/sync), `flow.ts` (hotspot/puzzle/phase helpers), `events.ts` (teacher event emission), `interactions.ts` (UI + pointer helpers)
 - `src/main.ts`: bridge registration and default init data
 - `src/style.css`: explorer/lesson styles (CSS vars, glass cards, mission UI, responsive)
 
@@ -71,16 +71,16 @@ title → save slot + difficulty → campaign map → shop/data log/briefing →
 ### Structure
 - `types.ts`: compatibility barrel re-exporting the split domain type modules in `src/arcade/types/`
 - `utils.ts`: runtime utilities (`circleHit`, `nearest`, `disposeMesh`, `tickSlow`, `randRange`, `pickRandom`, `distance`, `HitResult`), re-exports `clamp`/`lerp` from `src/utils.ts`
-- `mode.ts`: thinner arcade coordinator over extracted helpers
+- `mode.ts`: thinner arcade coordinator over extracted helpers, with shared state-patch helpers for menu/briefing/debrief/map transitions
 - `mode-view.ts`: arcade view-model/state shaping (`buildArcadeViewModel`, combat snapshot mapping, level summaries)
 - `campaign-state.ts`: pure campaign reward/route helpers used by `ArcadeMode`
-- `ui-actions.ts`: command-center UI action routing
+- `ui-actions.ts`: command-center UI action routing with normalized shop-action handling
 - `index.ts`, `style.css`: public arcade entry and styles
 - `render/deferred-dispose.ts`: queues material/geometry cleanup until after render so WebGPU does not submit destroyed buffers during combat/menu transitions
 - `data/`: static definitions — `weapons.ts`, `enemies.ts`, `bosses.ts`, `levels.ts`, `campaign.ts`, `lore.ts`, `difficulty.ts`, `mastery.ts`
 - `combat/`: runtime entities — `arena.ts`, `player.ts`, `bullets.ts`, `weapons.ts`, `enemies.ts`, `boss.ts`, `meteors.ts`, `terrain.ts`, `pickups.ts`, `power-ups.ts`, plus extracted helper modules
 - `combat/bullets.ts`: projectile runtime now keeps reusable mesh pools plus a 3-phase missile model (`launch -> acquire -> terminal`) with smoothed visual rotation, cached lock reacquire, target memory, proximity fuse state, splash metadata, and trail hooks
-- `combat/arena.ts`: combat facade; still owns the live loop/collision flow, but now delegates boss-upgrade math, timeline/scheduled spawns, pickup application, secret rules, debrief/result finalization, and 2-player co-op runtime coordination (P1 + wingmate)
+- `combat/arena.ts`: combat facade; still owns the live loop/collision flow, but now centralizes projectile-hit bookkeeping/explosions, cached damageable-target handling, pickup application, and delegates boss-upgrade math, timeline/scheduled spawns, secret rules, debrief/result finalization, and 2-player co-op runtime coordination (P1 + wingmate)
 - Regular enemies now resolve through planet-specific sprite/tint variant tables, so the authored `EnemyType` archetypes can stay shared while each planet still gets its own visual roster; filler waves also pull from planet-specific enemy pools, and normal-enemy HP now scales with campaign episode + combat wave on top of difficulty
 - `combat/modifiers.ts`, `timeline.ts`, `pickup-effects.ts`, `secret-rules.ts`, `outcome.ts`: extracted arcade combat subsystems; `timeline.ts` now delays boss entry until the authored spawn/hazard script has played out instead of interrupting late segments
 - `progression/`: economy & persistence — `inventory.ts`, `shop.ts`, `scoring.ts`
