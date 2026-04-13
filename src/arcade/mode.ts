@@ -34,7 +34,7 @@ import {
   createDefaultArcadeState,
   levelSummary,
 } from './mode-view'
-import { routeArcadeUiAction } from './ui-actions'
+import { routeArcadeUiAction, type ArcadeShopAction } from './ui-actions'
 import { GameMusic } from '../audio/music'
 import type {
   ArcadeEvent,
@@ -162,72 +162,28 @@ export class ArcadeMode {
   }
 
   handleAction(name: string, params: Record<string, unknown>): boolean {
-    if (name === 'arcade') return true
-    if (name === 'next_mission') {
-      void this.advanceToNextMission()
-      return true
-    }
-
-    if (name === 'next') {
-      if (this.state.phase === 'briefing') {
-        this.launchLevel()
+    switch (name) {
+      case 'arcade':
         return true
-      }
-      if (this.state.phase === 'debrief') {
-        this.handleUiAction('debrief_continue', {})
-        return true
-      }
-      if (this.state.phase === 'map') {
-        this.openBriefing()
-        return true
-      }
-    }
-
-    if (name === 'jump') {
-      const value = params.to
-      const levelId = typeof value === 'number'
-        ? MAIN_ROUTE[Math.max(0, Math.min(MAIN_ROUTE.length - 1, value))]
-        : String(value)
-      if (levelId) {
-        this.selectedLevelId = levelId
-        this.openBriefing()
-        return true
-      }
-    }
-
-    if (name === 'set') {
-      const field = String(params.field ?? '')
-      const value = params.value
-      if (field === 'phase' && (value === 'next_mission' || value === 'arcade_next_mission')) {
+      case 'next_mission':
         void this.advanceToNextMission()
         return true
-      }
-      if (field === 'credits' && this.campaign) {
-        this.campaign.credits = Number(value) || this.campaign.credits
-        this.persistCampaignState({ syncSummary: true })
-        this.message = 'Credits updated.'
+      case 'next':
+        return this.handleNextAction()
+      case 'jump':
+        return this.handleJumpAction(params.to)
+      case 'set':
+        return this.handleSetAction(params)
+      case 'end':
+        if (this.state.phase === 'combat') {
+          this.abortCombat('Combat aborted.')
+        } else {
+          this.exitArcade()
+        }
         return true
-      }
-      if (field === 'difficulty') {
-        this.setDifficulty(String(value) as Difficulty)
-        return true
-      }
-      if (field === 'health' && this.arena && this.state.phase === 'combat') {
-        this.message = 'Health override is not available in Command Center.'
-        return true
-      }
+      default:
+        return false
     }
-
-    if (name === 'end') {
-      if (this.state.phase === 'combat') {
-        this.abortCombat('Combat aborted.')
-      } else {
-        this.exitArcade()
-      }
-      return true
-    }
-
-    return false
   }
 
   getState(): ArcadeState {
@@ -245,24 +201,21 @@ export class ArcadeMode {
 
   private handleUiAction(action: string, params: Record<string, string>): void {
     routeArcadeUiAction(action, params, {
-      phase: this.state.phase,
-      debriefSuccess: Boolean(this.state.debrief?.success),
-      firstDataLogId: this.campaign?.dataLog[0] ?? null,
       startCampaign: (slot, continueExisting) => this.startCampaign(slot, continueExisting),
       setDifficulty: (difficulty) => this.setDifficulty(difficulty),
       exitArcade: () => this.exitArcade(),
-      persistCampaignState: (options) => this.persistCampaignState(options),
-      setPhase: (phase) => this.setPhase(phase),
-      setSelectedLevel: (levelId) => { this.selectedLevelId = levelId },
-      setMessage: (message) => { this.message = message },
+      returnToTitle: () => this.returnToTitle(),
+      selectLevel: (levelId) => this.selectLevel(levelId),
       openBriefing: () => this.openBriefing(),
       launchLevel: () => { void this.launchLevel() },
       setShopTab: (tab) => { this.shopTab = tab },
       openShop: () => this.openShop(),
       closeShop: () => this.closeShop(),
+      openDataLog: () => this.openDataLog(),
+      closeDataLog: () => this.closeDataLog(),
       runShopAction: (shopAction, entryId, slot) => this.runNamedShopAction(shopAction, entryId, slot),
-      abortOrBackToMap: () => this.backToMap(),
-      continueDebrief: () => this.advanceCampaignRoute(),
+      backToMap: () => this.backToMap(),
+      continueDebrief: () => this.continueDebrief(),
       setSelectedLog: (logId) => { this.selectedLogId = logId },
       retryLevel: () => this.openBriefing(),
     })
@@ -278,6 +231,84 @@ export class ArcadeMode {
       selectedLogId: this.selectedLogId,
       message: this.message,
     })
+  }
+
+  private patchState(patch: Partial<ArcadeState>): void {
+    this.state = {
+      ...this.state,
+      ...patch,
+      currentTab: this.shopTab,
+    }
+  }
+
+  private campaignSummaryPatch(): Pick<ArcadeState, 'credits' | 'score' | 'difficulty'> {
+    return {
+      credits: this.campaign?.credits ?? this.state.credits,
+      score: this.campaign?.score ?? this.state.score,
+      difficulty: this.campaign?.difficulty ?? this.state.difficulty,
+    }
+  }
+
+  private routeStatePatch(levelId = this.selectedLevelId) {
+    return levelSummary(levelId)
+  }
+
+  private handleNextAction(): boolean {
+    switch (this.state.phase) {
+      case 'briefing':
+        void this.launchLevel()
+        return true
+      case 'debrief':
+        this.continueDebrief()
+        return true
+      case 'map':
+        this.openBriefing()
+        return true
+      default:
+        return false
+    }
+  }
+
+  private handleJumpAction(value: unknown): boolean {
+    const levelId = typeof value === 'number'
+      ? MAIN_ROUTE[Math.max(0, Math.min(MAIN_ROUTE.length - 1, value))]
+      : typeof value === 'string'
+        ? value
+        : ''
+    if (!levelId) return false
+
+    this.selectLevel(levelId)
+    this.openBriefing()
+    return true
+  }
+
+  private handleSetAction(params: Record<string, unknown>): boolean {
+    const field = String(params.field ?? '')
+    const value = params.value
+
+    if (field === 'phase' && (value === 'next_mission' || value === 'arcade_next_mission')) {
+      void this.advanceToNextMission()
+      return true
+    }
+
+    if (field === 'credits' && this.campaign) {
+      this.campaign.credits = Number(value) || this.campaign.credits
+      this.persistCampaignState({ syncSummary: true })
+      this.message = 'Credits updated.'
+      return true
+    }
+
+    if (field === 'difficulty') {
+      this.setDifficulty(String(value) as Difficulty)
+      return true
+    }
+
+    if (field === 'health' && this.arena && this.state.phase === 'combat') {
+      this.message = 'Health override is not available in Command Center.'
+      return true
+    }
+
+    return false
   }
 
   private startCampaign(slot: number, continueExisting: boolean): void {
@@ -297,6 +328,11 @@ export class ArcadeMode {
     this.persistCampaignState()
   }
 
+  private selectLevel(levelId: string): void {
+    this.selectedLevelId = levelId
+    this.message = `${this.routeStatePatch(levelId).levelName} selected.`
+  }
+
   private openBriefing(): void {
     if (!this.campaign) return
     if (!isLevelUnlocked(this.campaign, this.selectedLevelId)) {
@@ -304,12 +340,11 @@ export class ArcadeMode {
       return
     }
 
-    this.state = {
-      ...this.state,
+    this.patchState({
       phase: 'briefing',
-      ...levelSummary(this.selectedLevelId),
+      ...this.routeStatePatch(),
       debrief: null,
-    }
+    })
     this.message = getLevelDef(this.selectedLevelId).briefing
   }
 
@@ -326,23 +361,26 @@ export class ArcadeMode {
       Math.max(1, canvas.clientHeight || canvas.height),
     )
     const level = getLevelDef(this.selectedLevelId)
-    this.state = {
-      ...this.state,
+    this.patchState({
       phase: 'combat',
-      ...levelSummary(this.selectedLevelId),
+      ...this.routeStatePatch(),
       debrief: null,
       comms: [level.briefing],
-    }
+    })
     this.message = level.briefing
   }
 
-  private async advanceToNextMission(): Promise<void> {
-    if (!this.campaign) {
-      this.message = 'Load a campaign first.'
-      return
-    }
+  private advanceRoute() {
+    if (!this.campaign) return null
 
-    if (this.state.phase === 'title') {
+    const next = advanceCampaignRouteState(this.campaign, this.selectedLevelId)
+    this.campaign = next.campaign
+    this.selectedLevelId = next.selectedLevelId
+    return next
+  }
+
+  private async advanceToNextMission(): Promise<void> {
+    if (!this.campaign || this.state.phase === 'title') {
       this.message = 'Load a campaign first.'
       return
     }
@@ -354,21 +392,18 @@ export class ArcadeMode {
       this.finishCombat()
     }
 
-    const next = advanceCampaignRouteState(this.campaign, this.selectedLevelId)
-    this.campaign = next.campaign
+    const next = this.advanceRoute()
+    if (!next) return
 
     if (!next.nextLevel) {
-      this.state = {
-        ...this.state,
-        credits: this.campaign.credits,
-        score: this.campaign.score,
+      this.patchState({
+        ...this.campaignSummaryPatch(),
         debrief: null,
-      }
+      })
       this.message = 'Campaign route complete.'
       return
     }
 
-    this.selectedLevelId = next.selectedLevelId
     this.persistCampaignState({ refreshSlots: false, syncSummary: true })
     this.openBriefing()
     if (this.state.phase !== 'briefing') return
@@ -394,34 +429,28 @@ export class ArcadeMode {
     })
     this.persistCampaignState()
 
-    this.state = {
-      ...this.state,
+    this.patchState({
       phase: debrief?.success ? 'debrief' : 'game_over',
-      score: this.campaign.score,
-      credits: this.campaign.credits,
+      ...this.campaignSummaryPatch(),
       debrief: debrief ?? null,
-    }
+    })
     this.message = debrief?.summary ?? 'Mission failed.'
     this.disposeArena()
   }
 
   private advanceCampaignRoute(): void {
-    if (!this.campaign) return
-
-    const next = advanceCampaignRouteState(this.campaign, this.selectedLevelId)
-    this.campaign = next.campaign
-    this.selectedLevelId = next.selectedLevelId
+    const next = this.advanceRoute()
+    if (!next) return
     if (next.nextLevel) {
       this.persistCampaignState({ refreshSlots: false })
     }
 
-    this.state = {
-      ...this.state,
-      credits: this.campaign.credits,
-      score: this.campaign.score,
-      ...levelSummary(this.selectedLevelId),
+    this.patchState({
+      phase: 'map',
+      ...this.campaignSummaryPatch(),
+      ...this.routeStatePatch(),
       debrief: null,
-    }
+    })
     this.message = next.nextLevel ? 'Route updated.' : 'Campaign route complete.'
   }
 
@@ -449,13 +478,11 @@ export class ArcadeMode {
 
   private abortCombat(message: string): void {
     this.disposeArena()
-    this.state = {
-      ...this.state,
+    this.patchState({
       phase: 'map',
-      credits: this.campaign?.credits ?? this.state.credits,
-      score: this.campaign?.score ?? this.state.score,
+      ...this.campaignSummaryPatch(),
       debrief: null,
-    }
+    })
     this.message = message
   }
 
@@ -483,38 +510,45 @@ export class ArcadeMode {
     this.setPhase(nextPhase)
   }
 
-  private setPhase(phase: ArcadePhase): void {
-    this.state = {
-      ...this.state,
-      phase,
-      currentTab: this.shopTab,
-    }
+  private openDataLog(): void {
+    this.selectedLogId = this.campaign?.dataLog[0] ?? null
+    this.setPhase('data_log')
   }
 
-  private runNamedShopAction(action: string, entryId: string, slot?: WeaponSlot): void {
-    switch (action) {
-      case 'buy_entry':
-        this.runShopAction(() => buyEntry(this.mustCampaign(), this.shopTab, entryId, slot))
-        return
-      case 'equip_entry':
-        this.runShopAction(() => equipEntry(this.mustCampaign(), this.shopTab, entryId))
-        return
-      case 'upgrade_entry':
-        this.runShopAction(() => upgradeWeapon(this.mustCampaign(), entryId))
-        return
-      case 'sell_slot':
-        this.runShopAction(() => sellEquipped(this.mustCampaign(), slot ?? 'front'))
-        return
-      case 'buy_ammo':
-        this.runShopAction(() => buyAmmo(this.mustCampaign(), entryId))
-        return
-      case 'equip_left':
-        this.runShopAction(() => equipEntry(this.mustCampaign(), 'sidekicks', entryId, 'sidekickL'))
-        return
-      case 'equip_right':
-        this.runShopAction(() => equipEntry(this.mustCampaign(), 'sidekicks', entryId, 'sidekickR'))
-        return
+  private closeDataLog(): void {
+    this.setPhase('map')
+  }
+
+  private continueDebrief(): void {
+    if (this.state.debrief?.success) {
+      this.advanceCampaignRoute()
+      return
     }
+
+    this.openBriefing()
+  }
+
+  private returnToTitle(): void {
+    this.persistCampaignState()
+    this.setPhase('title')
+  }
+
+  private setPhase(phase: ArcadePhase): void {
+    this.patchState({ phase })
+  }
+
+  private runNamedShopAction(action: ArcadeShopAction, entryId: string, slot?: WeaponSlot): void {
+    const campaign = this.mustCampaign()
+    const handlers: Record<ArcadeShopAction, () => { changed: boolean; message: string }> = {
+      buy_entry: () => buyEntry(campaign, this.shopTab, entryId, slot),
+      equip_entry: () => equipEntry(campaign, this.shopTab, entryId),
+      upgrade_entry: () => upgradeWeapon(campaign, entryId),
+      sell_slot: () => sellEquipped(campaign, slot ?? 'front'),
+      buy_ammo: () => buyAmmo(campaign, entryId),
+      equip_left: () => equipEntry(campaign, 'sidekicks', entryId, 'sidekickL'),
+      equip_right: () => equipEntry(campaign, 'sidekicks', entryId, 'sidekickR'),
+    }
+    this.runShopAction(handlers[action])
   }
 
   private runShopAction(action: () => { changed: boolean; message: string }): void {
@@ -532,12 +566,7 @@ export class ArcadeMode {
 
   private syncCampaignSummary(): void {
     if (!this.campaign) return
-    this.state = {
-      ...this.state,
-      credits: this.campaign.credits,
-      score: this.campaign.score,
-      difficulty: this.campaign.difficulty,
-    }
+    this.patchState(this.campaignSummaryPatch())
   }
 
   private disposeArena(): void {
@@ -572,7 +601,7 @@ export class ArcadeMode {
   }
 
   private setDifficulty(difficulty: Difficulty): void {
-    this.state.difficulty = difficulty
+    this.patchState({ difficulty })
     if (this.campaign) {
       this.campaign.difficulty = difficulty
       this.persistCampaignState()

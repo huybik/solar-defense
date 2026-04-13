@@ -1,24 +1,40 @@
 import type { ShopTab } from './progression/shop'
-import type { ArcadePhase, Difficulty, WeaponSlot } from './types'
+import type { Difficulty, WeaponSlot } from './types'
+
+export type ArcadeShopAction =
+  | 'buy_entry'
+  | 'equip_entry'
+  | 'upgrade_entry'
+  | 'sell_slot'
+  | 'buy_ammo'
+  | 'equip_left'
+  | 'equip_right'
+
+const SHOP_ACTIONS = new Set<ArcadeShopAction>([
+  'buy_entry',
+  'equip_entry',
+  'upgrade_entry',
+  'sell_slot',
+  'buy_ammo',
+  'equip_left',
+  'equip_right',
+])
 
 export interface ArcadeUiActionContext {
-  phase: ArcadePhase
-  debriefSuccess: boolean
-  firstDataLogId: string | null
   startCampaign: (slot: number, continueExisting: boolean) => void
   setDifficulty: (difficulty: Difficulty) => void
   exitArcade: () => void
-  persistCampaignState: (options?: { refreshSlots?: boolean; syncSummary?: boolean }) => void
-  setPhase: (phase: ArcadePhase) => void
-  setSelectedLevel: (levelId: string) => void
-  setMessage: (message: string) => void
+  returnToTitle: () => void
+  selectLevel: (levelId: string) => void
   openBriefing: () => void
   launchLevel: () => void
   setShopTab: (tab: ShopTab) => void
   openShop: () => void
   closeShop: () => void
-  runShopAction: (action: string, entryId: string, slot?: WeaponSlot) => void
-  abortOrBackToMap: () => void
+  openDataLog: () => void
+  closeDataLog: () => void
+  runShopAction: (action: ArcadeShopAction, entryId: string, slot?: WeaponSlot) => void
+  backToMap: () => void
   continueDebrief: () => void
   setSelectedLog: (logId: string | null) => void
   retryLevel: () => void
@@ -44,13 +60,11 @@ export function routeArcadeUiAction(
       ctx.exitArcade()
       return
     case 'back_to_title':
-      ctx.persistCampaignState()
-      ctx.setPhase('title')
+      ctx.returnToTitle()
       return
     case 'select_level':
       if (params.level) {
-        ctx.setSelectedLevel(params.level)
-        ctx.setMessage(`${params.level.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase())} selected.`)
+        ctx.selectLevel(params.level)
       }
       return
     case 'open_briefing':
@@ -66,46 +80,19 @@ export function routeArcadeUiAction(
       ctx.closeShop()
       return
     case 'open_data_log':
-      ctx.setSelectedLog(ctx.firstDataLogId)
-      ctx.setPhase('data_log')
+      ctx.openDataLog()
       return
     case 'close_data_log':
-      ctx.setPhase('map')
+      ctx.closeDataLog()
       return
     case 'shop_tab':
       ctx.setShopTab((params.tab as ShopTab) ?? 'front')
       return
-    case 'buy_entry':
-      ctx.runShopAction('buy_entry', String(params.entry ?? ''), params.slot as WeaponSlot | undefined)
-      return
-    case 'equip_entry':
-      ctx.runShopAction('equip_entry', String(params.entry ?? ''))
-      return
-    case 'upgrade_entry':
-      ctx.runShopAction('upgrade_entry', String(params.entry ?? ''))
-      return
-    case 'sell_slot':
-      ctx.runShopAction('sell_slot', '', String(params.slot ?? 'front') as WeaponSlot)
-      return
-    case 'buy_ammo':
-      ctx.runShopAction('buy_ammo', String(params.entry ?? ''))
-      return
-    case 'equip_left':
-      ctx.runShopAction('equip_left', String(params.entry ?? ''), 'sidekickL')
-      return
-    case 'equip_right':
-      ctx.runShopAction('equip_right', String(params.entry ?? ''), 'sidekickR')
-      return
     case 'back_to_map':
-      ctx.abortOrBackToMap()
+      ctx.backToMap()
       return
     case 'debrief_continue':
-      if (ctx.debriefSuccess) {
-        ctx.continueDebrief()
-        ctx.setPhase('map')
-      } else {
-        ctx.openBriefing()
-      }
+      ctx.continueDebrief()
       return
     case 'select_log':
       ctx.setSelectedLog(params.log ?? null)
@@ -113,5 +100,33 @@ export function routeArcadeUiAction(
     case 'retry_level':
       ctx.retryLevel()
       return
+  }
+
+  if (isShopAction(action)) {
+    ctx.runShopAction(action, String(params.entry ?? ''), getShopActionSlot(action, params))
+  }
+}
+
+function isShopAction(action: string): action is ArcadeShopAction {
+  return SHOP_ACTIONS.has(action as ArcadeShopAction)
+}
+
+function getShopActionSlot(
+  action: ArcadeShopAction,
+  params: Record<string, string>,
+): WeaponSlot | undefined {
+  switch (action) {
+    case 'buy_entry':
+      return params.slot as WeaponSlot | undefined
+    case 'sell_slot':
+      return String(params.slot ?? 'front') as WeaponSlot
+    case 'equip_left':
+      return 'sidekickL'
+    case 'equip_right':
+      return 'sidekickR'
+    case 'equip_entry':
+    case 'upgrade_entry':
+    case 'buy_ammo':
+      return undefined
   }
 }
